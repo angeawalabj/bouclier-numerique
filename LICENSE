@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2026 Le Bouclier Numérique
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## ⚠️ Avertissement d'usage — Outils offensifs
+
+Certains outils de ce dépôt (honeypot, scanner de ports, simulation de phishing,
+fuzzer d'API) sont conçus pour une utilisation **défensive et éducative** sur vos
+propres systèmes ou avec autorisation écrite explicite.
+
+Toute utilisation sur des systèmes appartenant à des tiers sans autorisation
+préalable est illégale et constitue une infraction pénale :
+
+- **France** : Art. L323-1 du Code pénal — jusqu'à 2 ans d'emprisonnement
+  et 60 000 € d'amende pour accès frauduleux à un système informatique.
+- **UE** : Directive 2013/40/UE relative aux attaques contre les systèmes
+  d'information.
+- **International** : Computer Fraud and Abuse Act (USA), Computer Misuse
+  Act (UK), et équivalents locaux.
+
+Les auteurs déclinent toute responsabilité pour une utilisation non conforme
+à cette licence et aux lois applicables.
