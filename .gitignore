@@ -1,0 +1,89 @@
+# 🛡️ Le Bouclier Numérique — .gitignore
+
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Environnements virtuels
+.venv/
+venv/
+ENV/
+env/
+
+# Tests & couverture
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Données sensibles — NE JAMAIS COMMITTER ────────────────────
+# Coffres et données chiffrées réelles
+*.vault
+vault.json
+vault_backup/
+
+# Bases de données avec vraies données
+*.db
+*.sqlite
+*.sqlite3
+!tests/fixtures/*.db       # Fixtures de test OK
+
+# Clés et secrets
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+.env
+.env.*
+secrets.json
+secrets.yaml
+config.local.*
+
+# Logs avec données réelles
+*.log
+logs/
+!tests/fixtures/*.log      # Fixtures de test OK
+
+# Sauvegardes et archives
+backups/
+*.bak
+*.tar.gz
+*.zip
+!tests/fixtures/           # Fixtures de test OK
+
+# Exports RGPD
+exports/
+rgpd_exports/
+erasure_reports/
+
+# ── Outils du challenge ────────────────────────────────────────
+# Outputs de démonstration (re-générables)
+/tmp/
+demo_output/
+phishing_campaigns/
+honeypot_logs/
+scan_results/
+
+# ── IDE & OS ───────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Divers ─────────────────────────────────────────────────────
+*.pyc
+node_modules/
