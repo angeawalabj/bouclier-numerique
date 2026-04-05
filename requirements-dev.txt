@@ -1,0 +1,15 @@
+# Dépendances de développement — ne pas installer en production
+-r requirements.txt
+
+# Tests
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.23.0
+
+# Qualité de code
+ruff>=0.3.0
+mypy>=1.9.0
+
+# Sécurité des dépendances
+pip-audit>=2.7.0
+safety>=3.0.0
