@@ -1,0 +1,78 @@
+name: 🛡️ CI — Tests & Qualité
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: 🔍 Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install ruff mypy
+      - name: Ruff — style et erreurs
+        run: ruff check . --output-format=github
+      - name: Ruff — formatage
+        run: ruff format --check .
+
+  test:
+    name: 🧪 Tests Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - run: pip install -r requirements-dev.txt
+      - name: Pytest avec couverture
+        run: pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-fail-under=70
+      - name: Upload couverture vers Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          file: ./coverage.xml
+
+  security:
+    name: 🔒 Audit sécurité dépendances
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - name: Audit CVE des dépendances
+        run: pip-audit -r requirements.txt --format=markdown
+
+  demo-smoke:
+    name: 🎬 Smoke test — modes démo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Tester tous les modes démo
+        run: |
+          python3 password_vault.py demo
+          python3 exif_cleaner.py demo
+          python3 leak_detector.py demo
+          python3 file_vault.py demo
+          python3 port_scanner.py demo
+          python3 honeypot.py demo
+          python3 log_anonymizer.py demo
+          python3 registre_traitements.py demo
+          echo "✅ Tous les modes démo fonctionnels"

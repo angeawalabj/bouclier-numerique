@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# 🛡️ Le Bouclier Numérique — Dépendances
+# Python 3.10+ requis
+# ═══════════════════════════════════════════════════════════════
+
+# ── Cryptographie ──────────────────────────────────────────────
+cryptography>=42.0.0       # AES-256-GCM, X25519, HKDF (J04, J18)
+bcrypt>=4.1.0              # Hachage mots de passe alternatif (J01)
+
+# ── Images ─────────────────────────────────────────────────────
+Pillow>=10.2.0             # Analyse et nettoyage EXIF (J02)
+
+# ── Réseau ─────────────────────────────────────────────────────
+requests>=2.31.0           # HTTP client (J03, J15)
+aiohttp>=3.9.0             # HTTP async (J07, J21)
+
+# ── Système ────────────────────────────────────────────────────
+psutil>=5.9.0              # Monitoring processus/ports (J05, J10)
+
+# ── Web / API ──────────────────────────────────────────────────
+flask>=3.0.0               # Serveur web léger (J06, J07)
+
+# ── Documents ──────────────────────────────────────────────────
+python-docx>=1.1.0         # Génération fichiers Word (J12, J19)
+
+# ── Données ────────────────────────────────────────────────────
+# (sqlite3 : stdlib Python, pas de dépendance externe)
