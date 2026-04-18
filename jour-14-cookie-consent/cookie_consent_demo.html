@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cookie Consent Manager — Bouclier Numérique Jour 14</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:     #0f0f0f;
+    --paper:   #faf8f3;
+    --cream:   #f0ece0;
+    --sand:    #e8e0cc;
+    --rust:    #c84b2f;
+    --rust-lt: #f2e8e4;
+    --sage:    #3d6b4f;
+    --sage-lt: #e4ede7;
+    --gold:    #b8902a;
+    --gold-lt: #f5edd6;
+    --muted:   #7a7265;
+    --border:  #d4ccb8;
+    --shadow:  0 2px 16px rgba(15,15,15,.08), 0 1px 4px rgba(15,15,15,.05);
+    --shadow-lg: 0 8px 40px rgba(15,15,15,.14), 0 2px 8px rgba(15,15,15,.06);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ── PAGE CONTENT (simulated website) ────────────────── */
+  .site-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 18px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .site-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    letter-spacing: -.3px;
+  }
+  .site-logo span { color: var(--gold); }
+  .site-nav { display: flex; gap: 28px; font-size: 13px; font-weight: 500;
+    letter-spacing: .5px; text-transform: uppercase; opacity: .7; }
+  .site-nav a { color: inherit; text-decoration: none; }
+
+  .hero {
+    padding: 80px 48px 60px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .hero-label {
+    font-size: 11px; font-weight: 500; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(32px, 5vw, 54px);
+    line-height: 1.1;
+    letter-spacing: -.5px;
+    margin-bottom: 20px;
+  }
+  .hero h1 em { font-style: italic; color: var(--rust); }
+  .hero p { font-size: 16px; color: var(--muted); max-width: 520px; line-height: 1.7; }
+
+  .demo-grid {
+    padding: 0 48px 80px;
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .demo-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+  }
+  .demo-card h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 17px;
+    margin-bottom: 8px;
+  }
+  .demo-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .status-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 6px;
+  }
+  .status-dot.blocked { background: var(--rust); }
+  .status-dot.allowed { background: var(--sage); }
+  .scripts-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .script-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    padding: 6px 10px;
+    background: var(--paper);
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  /* ── CONSENT BANNER ────────────────────────────────────── */
+  #cnil-banner {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    padding: 20px 20px 24px;
+    pointer-events: none;
+  }
+
+  .banner-inner {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 8px 8px 0 0;
+    padding: 28px 32px 24px;
+    max-width: 780px;
+    width: 100%;
+    pointer-events: all;
+    box-shadow: 0 -8px 48px rgba(0,0,0,.22);
+    animation: banner-rise .5s cubic-bezier(.16, 1, .3, 1) both;
+  }
+
+  @keyframes banner-rise {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  .banner-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .banner-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .banner-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .banner-desc {
+    font-size: 13px;
+    line-height: 1.65;
+    color: rgba(250,248,243,.6);
+  }
+  .banner-desc a { color: var(--gold); text-decoration: underline; }
+
+  /* Categories */
+  .banner-categories {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    animation: fade-in .3s ease;
+  }
+  .banner-categories.open { display: flex; }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .cat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,.06);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,.1);
+    transition: background .2s;
+  }
+  .cat-item:hover { background: rgba(255,255,255,.09); }
+  .cat-item.required { opacity: .6; }
+
+  .cat-toggle {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* Toggle switch */
+  .toggle-wrap { position: relative; width: 40px; height: 22px; }
+  .toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,.2);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background .25s;
+  }
+  .toggle-track::before {
+    content: '';
+    position: absolute;
+    width: 16px; height: 16px;
+    left: 3px; top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform .25s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  input:checked + .toggle-track { background: var(--sage); }
+  input:checked + .toggle-track::before { transform: translateX(18px); }
+  input:disabled + .toggle-track { cursor: not-allowed; }
+  input:disabled + .toggle-track::before { background: rgba(255,255,255,.5); }
+
+  .cat-info { flex: 1; }
+  .cat-name {
+    font-size: 13px; font-weight: 500; margin-bottom: 3px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cat-badge {
+    font-size: 9px; font-weight: 600; letter-spacing: .8px;
+    text-transform: uppercase; padding: 2px 6px;
+    border-radius: 3px; background: rgba(255,255,255,.12);
+  }
+  .cat-badge.required-badge {
+    background: rgba(184,144,42,.25); color: #e6c060;
+  }
+  .cat-desc { font-size: 12px; color: rgba(250,248,243,.5); line-height: 1.5; }
+  .cat-vendors {
+    margin-top: 6px;
+    display: flex; flex-wrap: wrap; gap: 5px;
+  }
+  .vendor-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: rgba(255,255,255,.08);
+    color: rgba(250,248,243,.55);
+  }
+
+  /* Actions */
+  .banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 10px 22px;
+    border-radius: 5px;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .btn-accept {
+    background: var(--sage);
+    color: white;
+  }
+  .btn-accept:hover { background: #4a7d5e; transform: translateY(-1px); }
+  .btn-reject {
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid rgba(255,255,255,.25);
+  }
+  .btn-reject:hover { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.06); }
+  .btn-customize {
+    background: transparent;
+    color: rgba(250,248,243,.55);
+    font-size: 12px;
+    padding: 10px 14px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .btn-customize:hover { color: var(--paper); }
+  .btn-save {
+    background: var(--gold);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .btn-save:hover { background: #c99b30; transform: translateY(-1px); }
+
+  .banner-footer {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    font-size: 11px;
+    color: rgba(250,248,243,.35);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .banner-footer a { color: rgba(250,248,243,.45); text-decoration: underline; }
+  .legal-ref {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(250,248,243,.25);
+  }
+
+  /* ── CONSENT STATE PANEL (bottom right after decision) ── */
+  #consent-state {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    max-width: 300px;
+    box-shadow: var(--shadow-lg);
+    z-index: 9998;
+    display: none;
+    animation: slide-in .4s cubic-bezier(.16, 1, .3, 1);
+  }
+
+  @keyframes slide-in {
+    from { transform: translateX(40px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+
+  .consent-state-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .consent-rows { display: flex; flex-direction: column; gap: 7px; }
+  .consent-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px;
+  }
+  .consent-row-label { color: var(--muted); }
+  .consent-pill {
+    font-size: 10px; font-weight: 600; letter-spacing: .5px;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .consent-pill.yes { background: var(--sage-lt); color: var(--sage); }
+  .consent-pill.no  { background: var(--rust-lt); color: var(--rust); }
+  .consent-pill.always { background: var(--gold-lt); color: var(--gold); }
+  .consent-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .consent-actions button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; padding: 6px 12px;
+    border-radius: 4px; cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-withdraw {
+    border: 1px solid var(--rust);
+    background: transparent; color: var(--rust);
+  }
+  .btn-withdraw:hover { background: var(--rust-lt); }
+  .btn-reopen {
+    border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+  }
+  .btn-reopen:hover { background: var(--cream); }
+  .consent-exp {
+    margin-top: 10px;
+    font-size: 10px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── SCRIPTS AUDIT LOG ─────────────────────────────────── */
+  #audit-log {
+    position: fixed;
+    top: 80px; right: 20px;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 8px;
+    padding: 16px 18px;
+    width: 300px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 9997;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+  }
+  .audit-title {
+    font-size: 10px; font-weight: 500; letter-spacing: 1px;
+    text-transform: uppercase; color: rgba(250,248,243,.4);
+    margin-bottom: 10px;
+  }
+  .audit-entry {
+    display: flex; gap: 8px; margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,.06); padding-bottom: 6px;
+    animation: fade-in .3s ease;
+  }
+  .audit-icon { flex-shrink: 0; }
+  .audit-text { color: rgba(250,248,243,.65); line-height: 1.4; }
+  .audit-time { color: rgba(250,248,243,.25); font-size: 10px; }
+
+  /* ── MANAGE BUTTON ─────────────────────────────────────── */
+  #manage-btn {
+    display: none;
+    position: fixed;
+    bottom: 20px; left: 20px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    opacity: 0;
+    transition: opacity .3s, transform .2s;
+  }
+  #manage-btn:hover { transform: translateY(-2px); }
+  #manage-btn.visible { opacity: 1; }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .site-nav, .demo-grid { display: none; }
+    .hero { padding: 40px 24px; }
+    .banner-inner { padding: 20px; border-radius: 8px 8px 0 0; }
+    .banner-actions { flex-direction: column; }
+    .btn { width: 100%; text-align: center; }
+    #audit-log { display: none; }
+    #consent-state { right: 10px; left: 10px; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Simulated website content -->
+<header class="site-header">
+  <div class="site-logo">Bouclier<span>Numérique</span></div>
+  <nav class="site-nav">
+    <a href="#">Accueil</a>
+    <a href="#">Produits</a>
+    <a href="#">Blog</a>
+    <a href="#">Contact</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <p class="hero-label">Bouclier Numérique · Jour 14</p>
+  <h1>Gestionnaire de<br><em>consentement</em> conforme CNIL</h1>
+  <p>Un Cookie Bot qui bloque réellement les scripts tiers —
+  GA4, Meta Pixel, Intercom — jusqu'au consentement explicite de l'utilisateur.
+  Conforme CNIL délibération 2020-091 et RGPD Art. 6(1)(a).</p>
+</div>
+
+<div class="demo-grid">
+  <div class="demo-card">
+    <h3>Scripts bloqués</h3>
+    <p>Aucun de ces scripts ne se charge avant votre choix :</p>
+    <div class="scripts-list">
+      <div class="script-item">
+        <span class="status-dot blocked" id="dot-ga"></span>
+        googletagmanager.com
+      </div>
+      <div class="script-item">
+        <span class="status-dot blocked" id="dot-fb"></span>
+        connect.facebook.net
+      </div>
+      <div class="script-item">
+        <span class="status-dot blocked" id="dot-ic"></span>
+        widget.intercom.io
+      </div>
+      <div class="script-item">
+        <span class="status-dot allowed"></span>
+        votresite.fr (session)
+      </div>
+    </div>
+  </div>
+  <div class="demo-card">
+    <h3>Preuve de consentement</h3>
+    <p>Chaque décision est horodatée, hashée et archivée en base :</p>
+    <div class="scripts-list" id="consent-preview">
+      <div class="script-item" style="color:var(--muted)">
+        En attente du choix utilisateur…
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── COOKIE CONSENT BANNER ────────────────────────────── -->
+<div id="cnil-banner">
+  <div class="banner-inner">
+
+    <div class="banner-top">
+      <div class="banner-icon">🍪</div>
+      <div>
+        <div class="banner-title">Nous respectons votre vie privée</div>
+        <div class="banner-desc">
+          Nous utilisons des cookies pour mesurer notre audience, améliorer votre expérience et, avec votre accord, afficher des publicités personnalisées.
+          Vous pouvez accepter, refuser, ou choisir précisément.
+          <a href="#">Politique de confidentialité</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories (hidden by default, shown on "Personnaliser") -->
+    <div class="banner-categories" id="banner-cats">
+
+      <!-- Essentiels (toujours actifs) -->
+      <div class="cat-item required">
+        <div class="cat-toggle">
+          <label class="toggle-wrap">
+            <input type="checkbox" checked disabled>
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="cat-info">
+          <div class="cat-name">
+            Cookies essentiels
+            <span class="cat-badge required-badge">Toujours actif</span>
+          </div>
+          <div class="cat-desc">Session, sécurité, panier. Indispensables au fonctionnement — ne peuvent pas être refusés.</div>
+          <div class="cat-vendors">
+            <span class="vendor-tag">Session cookie</span>
+            <span class="vendor-tag">CSRF token</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analytique -->
+      <div class="cat-item">
+        <div class="cat-toggle">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="toggle-analytique">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="cat-info">
+          <div class="cat-name">
+            Mesure d'audience
+            <span class="cat-badge">Analytique</span>
+          </div>
+          <div class="cat-desc">Statistiques de visite anonymisées (pages vues, durée, source). Conservation 13 mois — CNIL.</div>
+          <div class="cat-vendors">
+            <span class="vendor-tag">Google Analytics 4</span>
+            <span class="vendor-tag">États-Unis · DPF</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Marketing -->
+      <div class="cat-item">
+        <div class="cat-toggle">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="toggle-marketing">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="cat-info">
+          <div class="cat-name">
+            Publicité ciblée
+            <span class="cat-badge">Marketing</span>
+          </div>
+          <div class="cat-desc">Publicités personnalisées sur nos partenaires (Meta, Google Ads). Conservation 13 mois.</div>
+          <div class="cat-vendors">
+            <span class="vendor-tag">Meta Pixel</span>
+            <span class="vendor-tag">Google Ads</span>
+            <span class="vendor-tag">États-Unis · DPF</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fonctionnel -->
+      <div class="cat-item">
+        <div class="cat-toggle">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="toggle-fonctionnel">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="cat-info">
+          <div class="cat-name">
+            Fonctionnalités enrichies
+            <span class="cat-badge">Fonctionnel</span>
+          </div>
+          <div class="cat-desc">Chat support (Intercom), préférences de langue. Conservation 12 mois.</div>
+          <div class="cat-vendors">
+            <span class="vendor-tag">Intercom</span>
+            <span class="vendor-tag">États-Unis · CCT</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /banner-cats -->
+
+    <!-- Primary actions -->
+    <div class="banner-actions" id="banner-actions-main">
+      <button class="btn btn-accept" onclick="CookieConsent.acceptAll()">
+        Tout accepter
+      </button>
+      <button class="btn btn-reject" onclick="CookieConsent.rejectAll()">
+        Tout refuser
+      </button>
+      <button class="btn btn-customize" onclick="CookieConsent.showCustomize()">
+        Personnaliser ›
+      </button>
+    </div>
+
+    <!-- Custom actions (shown when categories expanded) -->
+    <div class="banner-actions" id="banner-actions-custom" style="display:none">
+      <button class="btn btn-save" onclick="CookieConsent.saveCustom()">
+        Enregistrer mes choix
+      </button>
+      <button class="btn btn-reject" onclick="CookieConsent.rejectAll()">
+        Tout refuser
+      </button>
+    </div>
+
+    <div class="banner-footer">
+      <span>
+        Art. 6(1)(a) RGPD · ePrivacy 2002/58/CE ·
+        <a href="#">Politique cookies</a> ·
+        <a href="#">DPO : dpo@site.fr</a>
+      </span>
+      <span class="legal-ref">v1.0 · exp. 180j</span>
+    </div>
+
+  </div>
+</div><!-- /banner -->
+
+<!-- Consent state panel (after decision) -->
+<div id="consent-state">
+  <div class="consent-state-title">
+    ✅ Préférences enregistrées
+  </div>
+  <div class="consent-rows">
+    <div class="consent-row">
+      <span class="consent-row-label">Essentiels</span>
+      <span class="consent-pill always">Toujours actif</span>
+    </div>
+    <div class="consent-row">
+      <span class="consent-row-label">📈 Analytique</span>
+      <span class="consent-pill" id="state-analytique">—</span>
+    </div>
+    <div class="consent-row">
+      <span class="consent-row-label">📢 Marketing</span>
+      <span class="consent-pill" id="state-marketing">—</span>
+    </div>
+    <div class="consent-row">
+      <span class="consent-row-label">⚙️ Fonctionnel</span>
+      <span class="consent-pill" id="state-fonctionnel">—</span>
+    </div>
+  </div>
+  <div class="consent-exp" id="state-exp"></div>
+  <div class="consent-actions">
+    <button class="btn-withdraw" onclick="CookieConsent.withdraw()">
+      ↩ Retirer le consentement
+    </button>
+    <button class="btn-reopen" onclick="CookieConsent.reopen()">
+      Modifier
+    </button>
+  </div>
+</div>
+
+<!-- Audit log panel -->
+<div id="audit-log">
+  <div class="audit-title">🛡️ Journal des scripts</div>
+  <div id="audit-entries"></div>
+</div>
+
+<!-- Manage button (Art. 7§3 RGPD — retrait aussi facile que le don) -->
+<button id="manage-btn" onclick="CookieConsent.reopen()">
+  🍪 Gérer les cookies
+</button>
+
+<script>
+/**
+ * Cookie Consent Manager
+ * Conforme CNIL délibération 2020-091 + RGPD Art. 6(1)(a)
+ * ePrivacy Directive 2002/58/CE Art. 5§3
+ */
+(function() {
+  'use strict';
+
+  const STORAGE_KEY    = 'cnil_consent_v1';
+  const CONSENT_DAYS   = 180;
+
+  // Domaines bloqués par catégorie
+  const BLOCKED = {
+    analytique:  ['googletagmanager.com', 'google-analytics.com'],
+    marketing:   ['facebook.net', 'facebook.com', 'doubleclick.net'],
+    fonctionnel: ['intercom.io', 'intercom.com'],
+  };
+
+  // ── Script injection definitions ──────────────────────────
+  const SCRIPTS = {
+    analytique: function() {
+      _auditLog('📈', 'Google Analytics 4 injecté', 'allowed');
+      updateDot('dot-ga', 'allowed');
+    },
+    marketing: function() {
+      _auditLog('📢', 'Meta Pixel + Google Ads injectés', 'allowed');
+      updateDot('dot-fb', 'allowed');
+    },
+    fonctionnel: function() {
+      _auditLog('⚙️', 'Intercom widget injecté', 'allowed');
+      updateDot('dot-ic', 'allowed');
+    },
+  };
+
+  // ── Block all third-party XHR + fetch before consent ──────
+  const allBlocked = Object.values(BLOCKED).flat();
+
+  const origFetch = window.fetch;
+  window.fetch = function(url, opts) {
+    const domain = _domain(typeof url === 'string' ? url : (url && url.url));
+    const consent = _load();
+    if (_shouldBlock(domain, consent)) {
+      _auditLog('🚫', `fetch() bloqué → ${domain}`, 'blocked');
+      return Promise.reject(new Error('Bloqué — consentement requis'));
+    }
+    return origFetch.apply(this, arguments);
+  };
+
+  const origXHR = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, url) {
+    const domain = _domain(url);
+    const consent = _load();
+    if (_shouldBlock(domain, consent)) {
+      _auditLog('🚫', `XHR bloqué → ${domain}`, 'blocked');
+      return;
+    }
+    return origXHR.apply(this, arguments);
+  };
+
+  function _shouldBlock(domain, consent) {
+    if (!domain) return false;
+    for (const [cat, domains] of Object.entries(BLOCKED)) {
+      if (domains.some(d => domain.includes(d))) {
+        if (!consent || !consent[cat]) return true;
+      }
+    }
+    return false;
+  }
+
+  // ── Storage ───────────────────────────────────────────────
+  function _load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      if (new Date(d.expires_at) < new Date()) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return d;
+    } catch(e) { return null; }
+  }
+
+  function _save(choices) {
+    const now = new Date();
+    const exp = new Date(now.getTime() + CONSENT_DAYS * 86400000);
+    const d = {
+      given_at:   now.toISOString(),
+      expires_at: exp.toISOString(),
+      id:         Math.random().toString(36).slice(2, 10).toUpperCase(),
+      version:    '1.0',
+      ...choices
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    return d;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────
+  function _domain(url) {
+    if (!url || url.startsWith('/')) return '';
+    try { return new URL(url).hostname; }
+    catch(e) { return ''; }
+  }
+
+  function _auditLog(icon, text, type) {
+    const container = document.getElementById('audit-entries');
+    if (!container) return;
+    const now  = new Date().toLocaleTimeString('fr-FR');
+    const el   = document.createElement('div');
+    el.className = 'audit-entry';
+    el.innerHTML = `
+      <span class="audit-icon">${icon}</span>
+      <div>
+        <div class="audit-text">${text}</div>
+        <div class="audit-time">${now}</div>
+      </div>
+    `;
+    container.prepend(el);
+    // Keep last 12
+    const entries = container.querySelectorAll('.audit-entry');
+    if (entries.length > 12) entries[entries.length-1].remove();
+  }
+
+  function updateDot(id, state) {
+    const dot = document.getElementById(id);
+    if (dot) {
+      dot.className = 'status-dot ' + state;
+    }
+  }
+
+  function _showState(consent) {
+    const panel = document.getElementById('consent-state');
+    if (!panel) return;
+
+    const setPill = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = val ? 'Accepté' : 'Refusé';
+      el.className   = 'consent-pill ' + (val ? 'yes' : 'no');
+    };
+
+    setPill('state-analytique',  consent.analytique);
+    setPill('state-marketing',   consent.marketing);
+    setPill('state-fonctionnel', consent.fonctionnel);
+
+    const expEl = document.getElementById('state-exp');
+    if (expEl) {
+      const exp = new Date(consent.expires_at);
+      expEl.textContent = `Expire le ${exp.toLocaleDateString('fr-FR')} · ID: ${consent.id}`;
+    }
+
+    panel.style.display = 'block';
+
+    // Update consent preview card
+    const preview = document.getElementById('consent-preview');
+    if (preview) {
+      preview.innerHTML = `
+        <div class="script-item">
+          <span class="status-dot allowed"></span>
+          ID: <strong>${consent.id}</strong>
+        </div>
+        <div class="script-item">
+          <span class="status-dot ${consent.analytique ? 'allowed' : 'blocked'}"></span>
+          Analytique: ${consent.analytique ? 'Accepté ✓' : 'Refusé'}
+        </div>
+        <div class="script-item">
+          <span class="status-dot ${consent.marketing ? 'allowed' : 'blocked'}"></span>
+          Marketing: ${consent.marketing ? 'Accepté ✓' : 'Refusé'}
+        </div>
+        <div class="script-item" style="font-size:10px;color:var(--muted)">
+          Expire: ${new Date(consent.expires_at).toLocaleDateString('fr-FR')}
+        </div>
+      `;
+    }
+  }
+
+  function _hideBanner() {
+    const banner = document.getElementById('cnil-banner');
+    if (!banner) return;
+    banner.style.transition = 'opacity .35s, transform .35s';
+    banner.style.opacity = '0';
+    banner.style.transform = 'translateY(20px)';
+    setTimeout(() => banner.style.display = 'none', 380);
+
+    // Show manage button (Art. 7§3 — retrait aussi facile)
+    const btn = document.getElementById('manage-btn');
+    if (btn) {
+      btn.style.display = 'flex';
+      setTimeout(() => btn.classList.add('visible'), 50);
+    }
+  }
+
+  function _applyConsent(consent) {
+    if (consent.analytique)  SCRIPTS.analytique();
+    if (consent.marketing)   SCRIPTS.marketing();
+    if (consent.fonctionnel) SCRIPTS.fonctionnel();
+
+    if (!consent.analytique)  _auditLog('🚫', 'Google Analytics — non consenti', 'blocked');
+    if (!consent.marketing)   _auditLog('🚫', 'Meta Pixel — non consenti', 'blocked');
+    if (!consent.fonctionnel) _auditLog('🚫', 'Intercom — non consenti', 'blocked');
+
+    window.dispatchEvent(new CustomEvent('consentUpdated', { detail: consent }));
+  }
+
+  // ── Public API ────────────────────────────────────────────
+  window.CookieConsent = {
+
+    acceptAll: function() {
+      const c = _save({ analytique: true, marketing: true, fonctionnel: true });
+      _auditLog('✅', 'Tout accepté — scripts injectés', 'allowed');
+      _hideBanner();
+      _applyConsent(c);
+      _showState(c);
+    },
+
+    rejectAll: function() {
+      const c = _save({ analytique: false, marketing: false, fonctionnel: false });
+      _auditLog('⛔', 'Tout refusé — aucun script tiers', 'blocked');
+      _hideBanner();
+      _showState(c);
+    },
+
+    saveCustom: function() {
+      const c = _save({
+        analytique:  document.getElementById('toggle-analytique')?.checked  || false,
+        marketing:   document.getElementById('toggle-marketing')?.checked   || false,
+        fonctionnel: document.getElementById('toggle-fonctionnel')?.checked || false,
+      });
+      const cats = ['analytique','marketing','fonctionnel']
+        .filter(k => c[k]).join(', ') || 'aucune';
+      _auditLog('💾', `Choix personnalisé : ${cats}`, 'allowed');
+      _hideBanner();
+      _applyConsent(c);
+      _showState(c);
+    },
+
+    showCustomize: function() {
+      const cats    = document.getElementById('banner-cats');
+      const main    = document.getElementById('banner-actions-main');
+      const custom  = document.getElementById('banner-actions-custom');
+      if (!cats) return;
+      cats.classList.add('open');
+      main.style.display   = 'none';
+      custom.style.display = 'flex';
+    },
+
+    withdraw: function() {
+      localStorage.removeItem(STORAGE_KEY);
+      _auditLog('↩️', 'Consentement retiré — Art. 7(3) RGPD', 'blocked');
+
+      // Reset dots
+      ['dot-ga','dot-fb','dot-ic'].forEach(id => updateDot(id, 'blocked'));
+
+      const panel = document.getElementById('consent-state');
+      if (panel) panel.style.display = 'none';
+
+      const btn = document.getElementById('manage-btn');
+      if (btn) { btn.classList.remove('visible'); btn.style.display = 'none'; }
+
+      // Show banner again
+      const banner = document.getElementById('cnil-banner');
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.style.opacity = '1';
+        banner.style.transform = 'none';
+        // Reset to main actions
+        const cats   = document.getElementById('banner-cats');
+        const main   = document.getElementById('banner-actions-main');
+        const custom = document.getElementById('banner-actions-custom');
+        if (cats)   cats.classList.remove('open');
+        if (main)   main.style.display   = 'flex';
+        if (custom) custom.style.display = 'none';
+      }
+
+      const preview = document.getElementById('consent-preview');
+      if (preview) {
+        preview.innerHTML = '<div class="script-item" style="color:var(--muted)">En attente du choix utilisateur…</div>';
+      }
+    },
+
+    reopen: function() {
+      const banner = document.getElementById('cnil-banner');
+      if (banner) {
+        banner.style.display    = 'flex';
+        banner.style.opacity    = '1';
+        banner.style.transform  = 'none';
+        // Reset to main view
+        const cats   = document.getElementById('banner-cats');
+        const main   = document.getElementById('banner-actions-main');
+        const custom = document.getElementById('banner-actions-custom');
+        if (cats)   cats.classList.remove('open');
+        if (main)   main.style.display   = 'flex';
+        if (custom) custom.style.display = 'none';
+      }
+    },
+
+    getConsent: _load,
+  };
+
+  // ── Init ──────────────────────────────────────────────────
+  const existing = _load();
+  if (existing) {
+    // Already consented — hide banner, apply scripts
+    const banner = document.getElementById('cnil-banner');
+    if (banner) banner.style.display = 'none';
+    _applyConsent(existing);
+    _showState(existing);
+    const btn = document.getElementById('manage-btn');
+    if (btn) { btn.style.display = 'flex'; setTimeout(() => btn.classList.add('visible'), 300); }
+    _auditLog('🔄', 'Consentement restauré depuis localStorage', 'allowed');
+  } else {
+    // Log initial blocks
+    setTimeout(() => {
+      _auditLog('🚫', 'GA4 — en attente de consentement', 'blocked');
+      _auditLog('🚫', 'Meta Pixel — en attente', 'blocked');
+      _auditLog('🚫', 'Intercom — en attente', 'blocked');
+    }, 300);
+  }
+
+})();
+</script>
+</body>
+</html>
