@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vous avez cliqué sur un lien de phishing simulé</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=IBM+Plex+Mono:wght@400;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --noir:    #0a0a0a;
+    --anthrac: #141414;
+    --carbon:  #1e1e1e;
+    --rouge:   #ff2d20;
+    --rouge-lt:#ff2d2020;
+    --ambre:   #f59e0b;
+    --vert:    #22c55e;
+    --bleu:    #3b82f6;
+    --gris:    #6b7280;
+    --clair:   #f5f5f0;
+    --blanc:   #ffffff;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--noir);
+    color: var(--clair);
+    font-family: 'Lora', serif;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ───────────────────────────────────────────────── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Animated background grid */
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,45,32,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,45,32,.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: grid-drift 20s linear infinite;
+  }
+  @keyframes grid-drift {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(60px); }
+  }
+
+  /* Big alert icon */
+  .alert-icon {
+    font-size: 80px;
+    line-height: 1;
+    margin-bottom: 32px;
+    animation: pulse-icon 2s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
+  }
+  @keyframes pulse-icon {
+    0%, 100% { transform: scale(1);   filter: drop-shadow(0 0 0px #ff2d20); }
+    50%       { transform: scale(1.05); filter: drop-shadow(0 0 24px #ff2d2088); }
+  }
+
+  .hero-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--rouge);
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+    animation: fade-up .6s .1s both;
+  }
+
+  .hero-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(40px, 7vw, 80px);
+    line-height: .95;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    animation: fade-up .6s .2s both;
+  }
+
+  .hero-title .line-red {
+    color: var(--rouge);
+    display: block;
+  }
+  .hero-title .line-white {
+    color: var(--blanc);
+    display: block;
+  }
+
+  .hero-subtitle {
+    margin-top: 28px;
+    font-size: 18px;
+    line-height: 1.65;
+    color: #a0a0a0;
+    max-width: 560px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    animation: fade-up .6s .35s both;
+  }
+
+  .hero-subtitle strong { color: var(--clair); }
+
+  .hero-badge {
+    margin-top: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,45,32,.12);
+    border: 1px solid rgba(255,45,32,.3);
+    border-radius: 40px;
+    padding: 10px 22px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--rouge);
+    position: relative;
+    z-index: 1;
+    animation: fade-up .6s .5s both;
+  }
+  .hero-badge::before {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--rouge);
+    animation: blink 1.4s ease infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  .scroll-cta {
+    margin-top: 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--gris);
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 1px;
+    position: relative;
+    z-index: 1;
+    animation: fade-up .6s .7s both;
+  }
+  .scroll-arrow {
+    width: 24px; height: 24px;
+    border-right: 2px solid var(--gris);
+    border-bottom: 2px solid var(--gris);
+    transform: rotate(45deg);
+    animation: bounce-arrow 2s ease infinite;
+  }
+  @keyframes bounce-arrow {
+    0%,100% { transform: rotate(45deg) translateY(0); }
+    50%      { transform: rotate(45deg) translateY(6px); }
+  }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── ANNOTATED EMAIL SECTION ──────────────────────────── */
+  .section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--rouge);
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.1;
+    margin-bottom: 40px;
+  }
+
+  /* Email preview with annotations */
+  .email-preview-wrap {
+    position: relative;
+  }
+
+  .email-preview {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,45,32,.3), 0 24px 80px rgba(255,45,32,.1);
+  }
+
+  .email-chrome {
+    background: #f0f0f0;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #ddd;
+  }
+  .chrome-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+  .chrome-bar {
+    flex: 1;
+    background: white;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #666;
+    border: 1px solid #ddd;
+  }
+
+  .email-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #eee;
+    background: #fafafa;
+  }
+  .email-header-row {
+    display: flex;
+    gap: 8px;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 4px;
+    font-family: Arial, sans-serif;
+  }
+  .email-header-label { font-weight: bold; width: 50px; flex-shrink: 0; }
+
+  .email-body {
+    padding: 0;
+    font-family: Arial, sans-serif;
+  }
+
+  /* Red flags — numbered callouts */
+  .flag {
+    position: relative;
+    display: inline-block;
+    background: rgba(255,45,32,.15);
+    border: 1.5px solid rgba(255,45,32,.6);
+    border-radius: 3px;
+    padding: 0 3px;
+    cursor: default;
+  }
+
+  .flag-num {
+    position: absolute;
+    top: -12px;
+    right: -8px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--rouge);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  /* Red flag list */
+  .flags-list {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .flag-card {
+    background: var(--anthrac);
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    transition: border-color .2s;
+  }
+  .flag-card:hover {
+    border-color: rgba(255,45,32,.4);
+  }
+
+  .flag-num-big {
+    flex-shrink: 0;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--rouge);
+    color: white;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .flag-card-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--blanc);
+    margin-bottom: 5px;
+  }
+  .flag-card-desc {
+    font-size: 13px;
+    color: var(--gris);
+    line-height: 1.6;
+  }
+
+  /* ── QUIZ SECTION ──────────────────────────────────────── */
+  .quiz-section {
+    background: var(--anthrac);
+    border-top: 1px solid #1e1e1e;
+    border-bottom: 1px solid #1e1e1e;
+  }
+
+  .quiz-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: clamp(24px, 3vw, 36px);
+    margin-bottom: 8px;
+  }
+  .quiz-sub {
+    color: var(--gris);
+    margin-bottom: 32px;
+    font-size: 15px;
+  }
+
+  .quiz-question {
+    background: var(--carbon);
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .4s, transform .4s;
+  }
+  .quiz-question.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .q-text {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--blanc);
+    font-family: 'Syne', sans-serif;
+  }
+  .q-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .q-option {
+    padding: 11px 16px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all .2s;
+    background: transparent;
+    color: var(--clair);
+    text-align: left;
+    font-family: 'Lora', serif;
+  }
+  .q-option:hover { border-color: #555; background: #2a2a2a; }
+  .q-option.correct {
+    border-color: var(--vert);
+    background: rgba(34,197,94,.1);
+    color: var(--vert);
+  }
+  .q-option.wrong {
+    border-color: var(--rouge);
+    background: rgba(255,45,32,.08);
+    color: var(--rouge);
+    text-decoration: line-through;
+    opacity: .6;
+  }
+
+  .q-feedback {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    display: none;
+  }
+  .q-feedback.show { display: block; }
+  .q-feedback.good {
+    background: rgba(34,197,94,.1);
+    border: 1px solid rgba(34,197,94,.3);
+    color: #86efac;
+  }
+  .q-feedback.bad {
+    background: rgba(255,45,32,.08);
+    border: 1px solid rgba(255,45,32,.2);
+    color: #fca5a5;
+  }
+
+  /* ── BEST PRACTICES ───────────────────────────────────── */
+  .practices-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 40px;
+  }
+
+  .practice-card {
+    background: var(--anthrac);
+    border: 1px solid #252525;
+    border-radius: 8px;
+    padding: 24px;
+    transition: all .3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .practice-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--bleu);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .3s;
+  }
+  .practice-card:hover { border-color: #333; transform: translateY(-3px); }
+  .practice-card:hover::before { transform: scaleX(1); }
+
+  .practice-icon { font-size: 28px; margin-bottom: 14px; }
+  .practice-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: var(--blanc);
+  }
+  .practice-desc {
+    font-size: 13px;
+    color: var(--gris);
+    line-height: 1.65;
+  }
+
+  /* ── FINAL CTA ─────────────────────────────────────────── */
+  .cta-section {
+    text-align: center;
+    padding: 80px 24px;
+    background: var(--anthrac);
+    border-top: 1px solid #1e1e1e;
+  }
+
+  .cta-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--vert);
+    margin-bottom: 16px;
+  }
+  .cta-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 50px);
+    margin-bottom: 16px;
+    line-height: 1.1;
+  }
+  .cta-title em { font-style: italic; color: var(--vert); font-family: 'Lora', serif; }
+  .cta-desc { color: var(--gris); max-width: 500px; margin: 0 auto 36px; line-height: 1.7; }
+
+  .cta-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--rouge);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 14px 32px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary:hover { background: #e02010; transform: translateY(-2px); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--clair);
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 14px 32px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+  }
+  .btn-secondary:hover { border-color: #666; background: #1e1e1e; }
+
+  /* Contact box */
+  .contact-box {
+    margin-top: 48px;
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--carbon);
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 16px 24px;
+  }
+  .contact-icon { font-size: 24px; }
+  .contact-label { font-size: 12px; color: var(--gris); margin-bottom: 2px; }
+  .contact-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: var(--bleu);
+  }
+
+  /* ── STATS BAR ─────────────────────────────────────────── */
+  .stats-bar {
+    background: var(--carbon);
+    border-top: 1px solid #1e1e1e;
+    border-bottom: 1px solid #1e1e1e;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    gap: 60px;
+    flex-wrap: wrap;
+  }
+  .stat-item { text-align: center; }
+  .stat-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--blanc);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-num.red   { color: var(--rouge); }
+  .stat-num.amber { color: var(--ambre); }
+  .stat-num.green { color: var(--vert);  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--gris);
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  /* Progress bar for quiz score */
+  .score-wrap {
+    max-width: 400px;
+    margin: 24px auto 0;
+    text-align: center;
+    display: none;
+  }
+  .score-wrap.show { display: block; }
+  .score-bar-bg {
+    height: 6px;
+    background: #2a2a2a;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .score-bar-fill {
+    height: 100%;
+    background: var(--vert);
+    border-radius: 3px;
+    transition: width 1s ease;
+  }
+  .score-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--gris);
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .flags-list, .practices-grid { grid-template-columns: 1fr; }
+    .stats-bar { gap: 32px; }
+    .cta-buttons { flex-direction: column; align-items: center; }
+  }
+
+  /* Intersect reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     HERO — Shock reveal
+═══════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="alert-icon">⚠️</div>
+  <p class="hero-eyebrow">Test de sécurité interne · Bouclier Numérique</p>
+  <h1 class="hero-title">
+    <span class="line-red">Vous venez</span>
+    <span class="line-white">de cliquer.</span>
+  </h1>
+  <p class="hero-subtitle">
+    Il s'agissait d'un <strong>exercice de phishing simulé</strong>.
+    Aucune donnée n'a été collectée. Votre mot de passe est en sécurité.
+    <br><br>
+    Ce test fait partie du programme de sensibilisation cybersécurité
+    de votre organisation.
+  </p>
+  <div class="hero-badge">
+    SIMULATION — AUCUNE DONNÉE COMPROMISE
+  </div>
+  <div class="scroll-cta">
+    DÉCOUVREZ CE QUI AURAIT PU SE PASSER
+    <div class="scroll-arrow"></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     STATS — Contexte global
+═══════════════════════════════════════════════════════ -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-num red">91%</div>
+    <div class="stat-label">des cyberattaques<br>commencent par un email</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num amber">3,4 s</div>
+    <div class="stat-label">temps médian avant<br>le premier clic</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num green">97%</div>
+    <div class="stat-label">des personnes formées<br>résistent au test suivant</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num red">4,45 M$</div>
+    <div class="stat-label">coût moyen d'une<br>violation de données (2023)</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     EMAIL ANNOTÉ — Les 5 signaux d'alarme
+═══════════════════════════════════════════════════════ -->
+<section class="section">
+  <p class="section-label reveal">Décryptage</p>
+  <h2 class="section-title reveal">
+    L'email que vous avez reçu,<br>
+    <span style="color:var(--rouge)">avec ses signaux d'alerte</span>
+  </h2>
+
+  <div class="email-preview-wrap reveal">
+    <div class="email-preview">
+      <!-- Browser chrome -->
+      <div class="email-chrome">
+        <div class="chrome-dot" style="background:#ff5f57"></div>
+        <div class="chrome-dot" style="background:#ffbd2e"></div>
+        <div class="chrome-dot" style="background:#28c840"></div>
+        <div class="chrome-bar">
+          📧 &nbsp;
+          <span class="flag" style="background:rgba(255,45,32,.15);border-color:rgba(255,45,32,.5)">
+            it-support@<strong>techcorp-it.net</strong>
+            <span class="flag-num">①</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Email header -->
+      <div class="email-header">
+        <div class="email-header-row">
+          <span class="email-header-label">De :</span>
+          <span>
+            <span class="flag">Équipe IT — Support Informatique &lt;it-support@techcorp-it.net&gt;
+              <span class="flag-num">①</span>
+            </span>
+          </span>
+        </div>
+        <div class="email-header-row">
+          <span class="email-header-label">Objet :</span>
+          <span>
+            <span class="flag">[SÉCURITÉ] Action requise : réinitialisez votre mot de passe
+              <span class="flag-num">②</span>
+            </span>
+          </span>
+        </div>
+        <div class="email-header-row">
+          <span class="email-header-label">À :</span>
+          <span style="color:#555">vous@votreentreprise.fr</span>
+        </div>
+      </div>
+
+      <!-- Email body simulation -->
+      <div class="email-body">
+        <div style="background:#c0392b;padding:16px 24px">
+          <span style="color:white;font-weight:bold;font-size:18px">🔐 Alerte Sécurité</span>
+        </div>
+        <div style="padding:24px;background:#fff;font-family:Arial,sans-serif;font-size:14px;color:#333">
+          <p style="margin-bottom:12px">Bonjour,</p>
+          <p style="margin-bottom:12px">Notre système de sécurité a détecté une connexion inhabituelle à votre compte depuis un appareil non reconnu.</p>
+          <div style="background:#fff3cd;border-left:4px solid #ffc107;padding:12px;margin:16px 0">
+            <strong>
+              <span class="flag">⚠️ Vous avez 24 heures pour sécuriser votre compte.
+                <span class="flag-num">②</span>
+              </span>
+            </strong><br>
+            <small>Passé ce délai, votre accès sera suspendu.</small>
+          </div>
+          <p style="margin-bottom:16px">
+            <span class="flag">
+              <a style="display:inline-block;background:#c0392b;color:white;padding:12px 28px;text-decoration:none;border-radius:4px;font-weight:bold">
+                Sécuriser mon compte maintenant →
+              </a>
+              <span class="flag-num">③</span>
+            </span>
+          </p>
+          <p style="color:#666;font-size:12px;margin-top:24px">
+            Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.<br>
+            <span class="flag">Support IT — it-support@techcorp-it.net
+              <span class="flag-num">④</span>
+            </span>
+          </p>
+          <p style="color:#999;font-size:11px;margin-top:8px">
+            <span class="flag">Cordialement,<br>L'équipe IT
+              <span class="flag-num">⑤</span>
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flags list -->
+  <div class="flags-list">
+    <div class="flag-card reveal">
+      <div class="flag-num-big">①</div>
+      <div>
+        <div class="flag-card-title">Domaine expéditeur suspect</div>
+        <div class="flag-card-desc">
+          L'email vient de <code style="background:#222;padding:2px 5px;border-radius:3px;font-size:12px">techcorp-it.net</code> et non
+          <code style="background:#222;padding:2px 5px;border-radius:3px;font-size:12px">techcorp.fr</code>.
+          Un seul mot différent — c'est le <em>typosquatting</em>.
+          Vérifiez toujours le domaine complet, pas seulement le nom affiché.
+        </div>
+      </div>
+    </div>
+    <div class="flag-card reveal" style="transition-delay:.1s">
+      <div class="flag-num-big">②</div>
+      <div>
+        <div class="flag-card-title">Urgence artificielle</div>
+        <div class="flag-card-desc">
+          "24 heures", "compte suspendu", "action immédiate" — ce sont des leviers
+          de manipulation émotionnelle classiques. L'urgence paralyse le jugement.
+          Votre IT ne vous suspendra jamais sans email préalable et appel téléphonique.
+        </div>
+      </div>
+    </div>
+    <div class="flag-card reveal" style="transition-delay:.2s">
+      <div class="flag-num-big">③</div>
+      <div>
+        <div class="flag-card-title">Lien vers un domaine externe</div>
+        <div class="flag-card-desc">
+          Passez votre souris sur le bouton sans cliquer.
+          L'URL pointe vers un domaine qui n'est pas celui de votre entreprise.
+          La vraie réinitialisation passe toujours par un portail interne ou
+          un formulaire Microsoft/Google officiel.
+        </div>
+      </div>
+    </div>
+    <div class="flag-card reveal" style="transition-delay:.3s">
+      <div class="flag-num-big">④</div>
+      <div>
+        <div class="flag-card-title">Adresse de réponse non officielle</div>
+        <div class="flag-card-desc">
+          La même adresse suspecte apparaît en pied de message.
+          Votre vraie équipe IT communique depuis <code style="background:#222;padding:2px 5px;border-radius:3px;font-size:12px">@votreentreprise.fr</code>.
+          Si vous doutez, appelez le support directement, ne répondez pas à l'email.
+        </div>
+      </div>
+    </div>
+    <div class="flag-card reveal" style="transition-delay:.4s">
+      <div class="flag-num-big">⑤</div>
+      <div>
+        <div class="flag-card-title">Signature générique sans identité</div>
+        <div class="flag-card-desc">
+          "L'équipe IT" sans nom, prénom, poste ni numéro de téléphone.
+          Les vrais emails internes mentionnent toujours une personne identifiable
+          que vous pouvez vérifier dans l'annuaire de l'entreprise.
+        </div>
+      </div>
+    </div>
+    <div class="flag-card reveal" style="transition-delay:.5s" style="border-color:rgba(245,158,11,.3)">
+      <div class="flag-num-big" style="background:var(--ambre)">!</div>
+      <div>
+        <div class="flag-card-title">Le bon réflexe : signaler</div>
+        <div class="flag-card-desc">
+          Si vous identifiez un email suspect : ne cliquez pas,
+          ne répondez pas, ne le transférez pas.
+          Utilisez le bouton <strong>"Signaler comme phishing"</strong> de votre
+          messagerie, ou transférez à <strong>sécurité@votreentreprise.fr</strong>.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     QUIZ INTERACTIF
+═══════════════════════════════════════════════════════ -->
+<section class="quiz-section">
+  <div class="section" style="padding-top:80px;padding-bottom:80px">
+    <p class="section-label reveal">Testez vos connaissances</p>
+    <h2 class="quiz-title reveal">Reconnaîtrez-vous le prochain ?</h2>
+    <p class="quiz-sub reveal">3 questions rapides pour ancrer les bons réflexes.</p>
+
+    <!-- Q1 -->
+    <div class="quiz-question reveal" id="q1">
+      <div class="q-text">1. Un email urgent vous demande votre mot de passe pour "vérifier votre identité". Que faites-vous ?</div>
+      <div class="q-options">
+        <button class="q-option" onclick="answer(1,'wrong',this)">
+          Je le saisis rapidement pour éviter la suspension
+        </button>
+        <button class="q-option" onclick="answer(1,'correct',this)">
+          Je n'entre jamais mon mot de passe suite à un email — j'appelle le support
+        </button>
+        <button class="q-option" onclick="answer(1,'wrong',this)">
+          Je réponds à l'email en demandant confirmation
+        </button>
+      </div>
+      <div class="q-feedback good" id="fb1-correct">
+        ✅ <strong>Exact.</strong> Aucun service légitime ne vous demandera votre mot de passe par email. En cas de doute, composez le numéro officiel du support — ne cliquez jamais sur le lien de l'email.
+      </div>
+      <div class="q-feedback bad" id="fb1-wrong">
+        ❌ <strong>Attention.</strong> Un service légitime ne demande jamais votre mot de passe par email. Répondre à l'email envoie votre réponse à l'attaquant. Appelez toujours le support par téléphone.
+      </div>
+    </div>
+
+    <!-- Q2 -->
+    <div class="quiz-question reveal" id="q2">
+      <div class="q-text">2. Comment vérifier qu'un lien dans un email est sûr avant de cliquer ?</div>
+      <div class="q-options">
+        <button class="q-option" onclick="answer(2,'wrong',this)">
+          Je fais confiance au bouton s'il a l'apparence officielle de l'entreprise
+        </button>
+        <button class="q-option" onclick="answer(2,'wrong',this)">
+          Je clique et je vois si la page qui s'ouvre est normale
+        </button>
+        <button class="q-option" onclick="answer(2,'correct',this)">
+          Je survole le lien avec ma souris et vérifie l'URL dans la barre de statut
+        </button>
+      </div>
+      <div class="q-feedback good" id="fb2-correct">
+        ✅ <strong>Parfait.</strong> Le survol (<em>hover</em>) révèle l'URL réelle. Si elle ne correspond pas au domaine officiel de l'expéditeur — n'approchez pas. Un bouton peut afficher n'importe quel texte mais pointer ailleurs.
+      </div>
+      <div class="q-feedback bad" id="fb2-wrong">
+        ❌ <strong>Piégé.</strong> L'apparence visuelle peut être copiée en 5 minutes. Cliquer pour "voir" vous expose. La seule vérification fiable : survoler et lire l'URL complète avant tout clic.
+      </div>
+    </div>
+
+    <!-- Q3 -->
+    <div class="quiz-question reveal" id="q3">
+      <div class="q-text">3. Vous recevez une facture d'un fournisseur avec un nouveau RIB "urgent". Que faites-vous ?</div>
+      <div class="q-options">
+        <button class="q-option" onclick="answer(3,'wrong',this)">
+          Je valide rapidement pour ne pas bloquer le paiement
+        </button>
+        <button class="q-option" onclick="answer(3,'correct',this)">
+          J'appelle le fournisseur sur son numéro habituel pour confirmer le changement
+        </button>
+        <button class="q-option" onclick="answer(3,'wrong',this)">
+          Je réponds à l'email pour demander une confirmation écrite
+        </button>
+      </div>
+      <div class="q-feedback good" id="fb3-correct">
+        ✅ <strong>Excellent.</strong> C'est la procédure anti-fraude au virement (BEC — Business Email Compromise). Toujours vérifier par téléphone sur un numéro connu. Les fraudeurs peuvent aussi intercepter les emails — une réponse email ne prouve rien.
+      </div>
+      <div class="q-feedback bad" id="fb3-wrong">
+        ❌ <strong>Danger.</strong> C'est la fraude au virement (BEC). Les attaquants compromettent l'email du fournisseur, envoient un faux RIB et récupèrent le virement. Seul un appel téléphonique sur un numéro préalablement connu peut valider le changement.
+      </div>
+    </div>
+
+    <!-- Score -->
+    <div class="score-wrap" id="score-wrap">
+      <div class="score-bar-bg">
+        <div class="score-bar-fill" id="score-bar" style="width:0%"></div>
+      </div>
+      <div class="score-text" id="score-text"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     BEST PRACTICES
+═══════════════════════════════════════════════════════ -->
+<section class="section">
+  <p class="section-label reveal">Boîte à outils</p>
+  <h2 class="section-title reveal">
+    6 réflexes qui vous protègent
+  </h2>
+
+  <div class="practices-grid">
+    <div class="practice-card reveal">
+      <div class="practice-icon">🔍</div>
+      <div class="practice-title">Vérifiez le domaine expéditeur</div>
+      <div class="practice-desc">
+        Lisez l'adresse complète, pas seulement le nom affiché.
+        <code style="background:#111;padding:1px 5px;border-radius:2px;font-size:11px">techcorp-it.net</code>
+        ≠ <code style="background:#111;padding:1px 5px;border-radius:2px;font-size:11px">techcorp.fr</code>
+      </div>
+    </div>
+    <div class="practice-card reveal" style="transition-delay:.1s">
+      <div class="practice-icon">🖱️</div>
+      <div class="practice-title">Survolez avant de cliquer</div>
+      <div class="practice-desc">
+        Passez la souris sur chaque lien. L'URL réelle apparaît
+        dans la barre de statut en bas du navigateur.
+      </div>
+    </div>
+    <div class="practice-card reveal" style="transition-delay:.2s">
+      <div class="practice-icon">🧊</div>
+      <div class="practice-title">Défiez l'urgence</div>
+      <div class="practice-desc">
+        Plus un email presse, plus il mérite de la méfiance.
+        Prenez 30 secondes. Appelez. L'urgence est toujours une tactique.
+      </div>
+    </div>
+    <div class="practice-card reveal" style="transition-delay:.3s">
+      <div class="practice-icon">📞</div>
+      <div class="practice-title">Vérifiez hors-canal</div>
+      <div class="practice-desc">
+        Si un email demande une action sensible : appelez
+        la personne sur son numéro habituel. Jamais par email de retour.
+      </div>
+    </div>
+    <div class="practice-card reveal" style="transition-delay:.4s">
+      <div class="practice-icon">🚩</div>
+      <div class="practice-title">Signalez, ne supprimez pas</div>
+      <div class="practice-desc">
+        Utilisez le bouton "Phishing" de votre messagerie.
+        Votre signalement protège toute l'organisation, pas seulement vous.
+      </div>
+    </div>
+    <div class="practice-card reveal" style="transition-delay:.5s">
+      <div class="practice-icon">🔐</div>
+      <div class="practice-title">MFA sur tous vos comptes</div>
+      <div class="practice-desc">
+        Même si vous saisissez vos identifiants sur un faux site,
+        l'authentification à deux facteurs (MFA) bloque l'attaquant.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     FINAL CTA
+═══════════════════════════════════════════════════════ -->
+<section class="cta-section">
+  <p class="cta-label">Vous êtes maintenant informé</p>
+  <h2 class="cta-title">
+    Transformez ce clic en<br><em>bouclier</em> pour la suite
+  </h2>
+  <p class="cta-desc">
+    Ce test ne cherche pas à vous piéger — il cherche à vous protéger.
+    97% des personnes ayant suivi cette sensibilisation résistent
+    au test suivant. Vous en faites maintenant partie.
+  </p>
+  <div class="cta-buttons">
+    <a href="#" class="btn-primary" onclick="markEducated()">
+      ✅ J'ai compris — Marquer comme lu
+    </a>
+    <a href="mailto:securite@votreentreprise.fr" class="btn-secondary">
+      📧 Contacter l'équipe sécurité
+    </a>
+  </div>
+  <div class="contact-box">
+    <div class="contact-icon">🛡️</div>
+    <div>
+      <div class="contact-label">Équipe Cybersécurité</div>
+      <div class="contact-value">securite@votreentreprise.fr · Poste 4200</div>
+    </div>
+  </div>
+  <p style="color:var(--gris);font-size:12px;margin-top:32px;font-family:'IBM Plex Mono',monospace">
+    Bouclier Numérique — Jour 16 · Simulation éthique interne · ANSSI mesure 42 ·
+    Données non collectées · <span id="ts"></span>
+  </p>
+</section>
+
+<script>
+  // Timestamp
+  document.getElementById('ts').textContent =
+    new Date().toLocaleString('fr-FR');
+
+  // Intersection Observer for reveal animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        // Trigger quiz questions
+        if (entry.target.classList.contains('quiz-question')) {
+          setTimeout(() => entry.target.classList.add('visible'), 100);
+        }
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('.reveal, .quiz-question').forEach(el => {
+    observer.observe(el);
+  });
+
+  // Quiz logic
+  let scores = { 1: null, 2: null, 3: null };
+
+  function answer(q, type, btn) {
+    // Disable all options for this question
+    const qEl = document.getElementById('q' + q);
+    qEl.querySelectorAll('.q-option').forEach(b => {
+      b.disabled = true;
+      b.style.cursor = 'default';
+    });
+
+    btn.classList.add(type);
+
+    // If wrong, highlight correct
+    if (type === 'wrong') {
+      qEl.querySelectorAll('.q-option').forEach(b => {
+        if (b.onclick && b.onclick.toString().includes("'correct'")) {
+          b.classList.add('correct');
+        }
+      });
+    }
+
+    // Show feedback
+    const fbId = type === 'correct' ? `fb${q}-correct` : `fb${q}-wrong`;
+    const fb   = document.getElementById(fbId);
+    if (fb) { fb.classList.add('show'); }
+
+    scores[q] = type === 'correct' ? 1 : 0;
+
+    // Check if all answered
+    const allAnswered = Object.values(scores).every(v => v !== null);
+    if (allAnswered) showScore();
+  }
+
+  function showScore() {
+    const total = Object.values(scores).reduce((a, b) => a + b, 0);
+    const pct   = Math.round(total / 3 * 100);
+    const wrap  = document.getElementById('score-wrap');
+    const bar   = document.getElementById('score-bar');
+    const text  = document.getElementById('score-text');
+
+    wrap.classList.add('show');
+    setTimeout(() => { bar.style.width = pct + '%'; }, 50);
+
+    const msg = total === 3
+      ? `🎉 Score parfait ${total}/3 — Vous avez les bons réflexes !`
+      : total === 2
+      ? `👍 Score ${total}/3 — Bonne base, continuez à pratiquer`
+      : `📚 Score ${total}/3 — Relisez les conseils ci-dessus`;
+
+    text.textContent = msg;
+    if (total < 3) bar.style.background = '#f59e0b';
+    if (total === 1) bar.style.background = '#ef4444';
+  }
+
+  function markEducated() {
+    // In production, this would POST to /track/{token}?event=educated
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token) {
+      fetch(`/track/${token}?educated=1`, { method: 'GET' }).catch(() => {});
+    }
+    // Visual feedback
+    const btn = event.target;
+    btn.textContent = '✅ Enregistré — Merci !';
+    btn.style.background = 'var(--vert)';
+    btn.disabled = true;
+  }
+</script>
+</body>
+</html>

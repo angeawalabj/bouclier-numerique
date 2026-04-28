@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Registre des traitements — TechCorp SARL</title>
+  <style>
+    :root {
+      --primary: #003189; --accent: #e63946;
+      --ok: #2a9d8f; --warn: #e9c46a; --err: #e63946;
+      --bg: #f8f9fa; --card: #ffffff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif;
+           background: var(--bg); color: #1d1d1d; font-size: 14px; }
+    .page { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+
+    /* Header */
+    header { background: var(--primary); color: #fff;
+             padding: 30px; border-radius: 8px; margin-bottom: 30px; }
+    header h1 { font-size: 24px; margin-bottom: 6px; }
+    header .meta { font-size: 12px; opacity: .8; }
+    .logo { float: right; font-size: 40px; }
+
+    /* Score card */
+    .score-section { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+    .score-card {
+      background: var(--card); border-radius: 8px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08); flex: 1; min-width: 180px;
+      text-align: center;
+    }
+    .score-big { font-size: 48px; font-weight: 900; line-height: 1; }
+    .score-label { font-size: 12px; color: #666; margin-top: 4px; }
+    .score-ok   { color: var(--ok); }
+    .score-warn { color: #e9c46a; }
+    .score-err  { color: var(--err); }
+
+    /* Checks */
+    .checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                   gap: 12px; margin-bottom: 30px; }
+    .check-item { background: var(--card); border-radius: 6px; padding: 12px 16px;
+                  border-left: 4px solid #ccc; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .check-item.ok   { border-left-color: var(--ok); }
+    .check-item.warn { border-left-color: var(--warn); }
+    .check-item.err  { border-left-color: var(--err); }
+    .check-name  { font-weight: 600; font-size: 12px; color: #555; text-transform: uppercase; margin-bottom: 4px; }
+    .check-value { font-size: 14px; }
+
+    /* Table */
+    .section { background: var(--card); border-radius: 8px; padding: 24px;
+               margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .section h2 { font-size: 16px; color: var(--primary); margin-bottom: 16px;
+                  padding-bottom: 10px; border-bottom: 2px solid #eee; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f0f4ff; color: var(--primary); padding: 10px 12px;
+         text-align: left; font-weight: 600; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tr:hover td { background: #fafbff; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-ok   { background: #d4edda; color: #155724; }
+    .badge-warn { background: #fff3cd; color: #856404; }
+    .badge-err  { background: #f8d7da; color: #721c24; }
+    .badge-blue { background: #cce5ff; color: #004085; }
+
+    /* Anomalies */
+    .anomalie { padding: 10px 14px; border-radius: 6px; margin-bottom: 8px;
+                border-left: 4px solid; }
+    .anomalie.CRITIQUE { border-color: var(--err); background: #fff5f5; }
+    .anomalie.MAJEUR   { border-color: var(--warn); background: #fffdf0; }
+    .anomalie h4 { font-size: 12px; text-transform: uppercase; margin-bottom: 3px; }
+    .anomalie p  { font-size: 13px; }
+    .anomalie small { color: #888; font-size: 11px; }
+
+    /* Footer */
+    footer { text-align: center; color: #aaa; font-size: 11px;
+             margin-top: 40px; padding-top: 20px;
+             border-top: 1px solid #eee; }
+
+    @media print {
+      body { background: white; }
+      .page { padding: 10px; }
+      header { -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="logo">📋</div>
+    <h1>Registre des activités de traitement</h1>
+    <p>TechCorp SARL · SIREN 123 456 789</p>
+    <div class="meta">
+      Généré le 27/02/2026 à 02:39 · Conforme Art. 30 RGPD
+       · DPO : Claire Bernard (dpo@techcorp.fr)
+    </div>
+  </header>
+
+  <!-- Score de conformité -->
+  <div class="score-section">
+    <div class="score-card">
+      <div class="score-big score-warn">
+        86%
+      </div>
+      <div class="score-label">Score de conformité</div>
+      <div style="margin-top:6px;font-size:13px">⚠️  PARTIELLEMENT CONFORME</div>
+    </div>
+    <div class="score-card">
+      <div class="score-big" style="color:var(--primary)">6</div>
+      <div class="score-label">Traitements enregistrés</div>
+    </div>
+    <div class="score-card">
+      <div class="score-big score-warn">
+        2
+      </div>
+      <div class="score-label">Anomalies détectées</div>
+    </div>
+    <div class="score-card">
+      <div class="score-big" style="color:#888">1</div>
+      <div class="score-label">Violations enregistrées</div>
+    </div>
+  </div>
+
+  <!-- Checks détaillés -->
+  <div class="section">
+    <h2>📊 État des contrôles de conformité</h2>
+    <div class="checks-grid">
+      
+      <div class="check-item ok">
+        <div class="check-name">organisation</div>
+        <div class="check-value">✅ Renseignée</div>
+      </div>
+      
+      <div class="check-item ok">
+        <div class="check-name">champs obligatoires</div>
+        <div class="check-value">✅ 6/6</div>
+      </div>
+      
+      <div class="check-item warn">
+        <div class="check-name">mesures securite</div>
+        <div class="check-value">⚠️  5/6 documentées</div>
+      </div>
+      
+      <div class="check-item ok">
+        <div class="check-name">aipd</div>
+        <div class="check-value">✅ AIPD réalisées pour données sensibles</div>
+      </div>
+      
+      <div class="check-item err">
+        <div class="check-name">transferts</div>
+        <div class="check-value">❌ 1 transfert(s) non encadré(s)</div>
+      </div>
+      
+      <div class="check-item ok">
+        <div class="check-name">conservation</div>
+        <div class="check-value">✅ Délais définis pour tous</div>
+      </div>
+      
+      <div class="check-item ok">
+        <div class="check-name">violations</div>
+        <div class="check-value">✅ 1 violation(s) enregistrée(s)</div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Registre des traitements -->
+  <div class="section">
+    <h2>🗂️ Registre des activités de traitement (Art. 30 RGPD)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Réf.</th>
+          <th>Traitement</th>
+          <th>Finalité</th>
+          <th>Base légale</th>
+          <th>Données</th>
+          <th>Conservation</th>
+          <th>Sécurité</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td><strong>TRT-2026-0001</strong></td>
+          <td>
+            Gestion de la relation client (CRM)<br>
+            
+            <small style="color:#888">Direction Commerciale</small>
+            
+          </td>
+          <td style="max-width:200px">Suivi commercial, facturation, support client, historique achats</td>
+          <td>
+            <span class="badge badge-blue">CONTRAT</span>
+          </td>
+          <td style="max-width:180px">
+            Nom, prénom, email, téléphone, adresse, historique achats, p
+            
+          </td>
+          <td>3 ans après dernier contact</td>
+          <td>
+            
+            <span class="badge badge-ok">4 mesure(s)</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+        <tr>
+          <td><strong>TRT-2026-0002</strong></td>
+          <td>
+            Gestion des ressources humaines<br>
+            
+            <small style="color:#888">DRH</small>
+            
+          </td>
+          <td style="max-width:200px">Administration du personnel, paie, formation, gestion des accès</td>
+          <td>
+            <span class="badge badge-blue">OBLIGATION_LEGALE</span>
+          </td>
+          <td style="max-width:180px">
+            Identité, coordonnées, RIB, numéro SS, contrat, salaire, abs
+            
+            <br><span class="badge badge-err">Art. 9 — Données sensibles</span>
+            
+          </td>
+          <td>5 ans après départ du salarié</td>
+          <td>
+            
+            <span class="badge badge-ok">4 mesure(s)</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+        <tr>
+          <td><strong>TRT-2026-0003</strong></td>
+          <td>
+            Statistiques d'utilisation (Analytics)<br>
+            
+            <small style="color:#888">Product Manager</small>
+            
+          </td>
+          <td style="max-width:200px">Amélioration du produit, mesure audience, détection bugs</td>
+          <td>
+            <span class="badge badge-blue">CONSENTEMENT</span>
+          </td>
+          <td style="max-width:180px">
+            IP pseudonymisée, pages visitées, durée session, navigateur
+            
+          </td>
+          <td>13 mois (recommandation CNIL cookies)</td>
+          <td>
+            
+            <span class="badge badge-ok">2 mesure(s)</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+        <tr>
+          <td><strong>TRT-2026-0004</strong></td>
+          <td>
+            Vidéosurveillance des locaux<br>
+            
+            <small style="color:#888">Direction des services généraux</small>
+            
+          </td>
+          <td style="max-width:200px">Sécurité des personnes et des biens</td>
+          <td>
+            <span class="badge badge-blue">INTERET_LEGITIME</span>
+          </td>
+          <td style="max-width:180px">
+            Images et vidéos de personnes
+            
+          </td>
+          <td>30 jours (maximum légal)</td>
+          <td>
+            
+            <span class="badge badge-ok">2 mesure(s)</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+        <tr>
+          <td><strong>TRT-2026-0005</strong></td>
+          <td>
+            Recrutement et gestion des candidatures<br>
+            
+            <small style="color:#888">DRH</small>
+            
+          </td>
+          <td style="max-width:200px">Sélection de candidats, constitution de viviers RH</td>
+          <td>
+            <span class="badge badge-blue">INTERET_LEGITIME</span>
+          </td>
+          <td style="max-width:180px">
+            CV, lettre motivation, diplômes, expériences, entretiens
+            
+          </td>
+          <td>2 ans (CNIL — avec consentement du candidat)</td>
+          <td>
+            
+            <span class="badge badge-err">Non documenté</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+        <tr>
+          <td><strong>TRT-2026-0006</strong></td>
+          <td>
+            Transferts financiers internationaux<br>
+            
+            <small style="color:#888">DAF</small>
+            
+          </td>
+          <td style="max-width:200px">Paiements clients et fournisseurs hors UE</td>
+          <td>
+            <span class="badge badge-blue">CONTRAT</span>
+          </td>
+          <td style="max-width:180px">
+            IBAN, RIB, coordonnées bancaires, montants
+            
+          </td>
+          <td>10 ans (Code commerce)</td>
+          <td>
+            
+            <span class="badge badge-ok">2 mesure(s)</span>
+            
+          </td>
+          <td>
+            <span class="badge badge-ok">
+              ACTIF
+            </span>
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Anomalies -->
+  
+  <div class="section">
+    <h2>⚠️ Anomalies de conformité détectées</h2>
+    
+    <div class="anomalie MAJEUR">
+      <h4>MAJEUR</h4>
+      <p>1 traitement(s) sans mesures de sécurité</p>
+      <small>Art. 32 RGPD</small>
+    </div>
+    
+    <div class="anomalie CRITIQUE">
+      <h4>CRITIQUE</h4>
+      <p>Transferts hors UE sans garantie : ['TRT-2026-0006 → Maroc']</p>
+      <small>Art. 44-49 RGPD</small>
+    </div>
+    
+  </div>
+  
+
+  <!-- Recommandations -->
+  
+  <div class="section">
+    <h2>🎯 Plan d'action recommandé</h2>
+    <table>
+      <thead>
+        <tr><th>Priorité</th><th>Action corrective</th><th>Article</th><th>Délai</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td>
+            <span class="badge badge-err">
+              CRITIQUE
+            </span>
+          </td>
+          <td>Mettre en place des Clauses Contractuelles Types (CCT) ou BCR</td>
+          <td><small>Art. 44-49 RGPD</small></td>
+          <td><strong>Avant tout transfert</strong></td>
+        </tr>
+        
+        <tr>
+          <td>
+            <span class="badge badge-warn">
+              MAJEUR
+            </span>
+          </td>
+          <td>Documenter les mesures Art. 32 pour chaque traitement</td>
+          <td><small>Art. 32 RGPD</small></td>
+          <td><strong>30 jours</strong></td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+  
+
+  <!-- Violations -->
+  
+  <div class="section">
+    <h2>🚨 Registre des violations (Art. 33 RGPD)</h2>
+    <table>
+      <thead>
+        <tr><th>Réf.</th><th>Traitement</th><th>Date</th><th>Gravité</th>
+            <th>Personnes</th><th>Notif. CNIL</th><th>Statut</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td><strong>VIO-20260227-B9E6F1</strong></td>
+          <td>TRT-2026-0001</td>
+          <td>2026-01-15</td>
+          <td><span class="badge badge-warn">ELEVEE</span></td>
+          <td>1240</td>
+          <td>✅ 2026-01-17</td>
+          <td>CLOTURE</td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+  
+
+  <footer>
+    Registre généré automatiquement le 27/02/2026 à 02:39 · Art. 30 RGPD
+    · Confidentiel — Usage interne uniquement
+    · Bouclier Numérique Jour 10
+  </footer>
+</div>
+</body>
+</html>
