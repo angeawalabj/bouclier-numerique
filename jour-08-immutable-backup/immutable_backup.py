@@ -1,36 +1,24 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 8 : LE BACKUP IMMUABLE           ║
-║  Protection  : Anti-Ransomware · WORM · Rétention 30 jours      ║
-║  Mécanisme   : Immutabilité locale + manifest SHA-256 signé      ║
-║  Cloud ready : S3 Object Lock · Azure Immutable Blob             ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Sauvegardes protégées contre l'écrasement — y compris par root.
 
-Exigence légale : Art. 32 RGPD — "la capacité à rétablir la
-disponibilité des données à caractère personnel et l'accès
-à celles-ci dans des délais appropriés en cas d'incident."
-
-ANSSI — Guide ransomware (2021) : "La mise en place de sauvegardes
-régulières, testées, et déconnectées du réseau de production
-est la mesure la plus efficace contre les ransomwares."
-
-Problème : Un ransomware moderne chiffre non seulement les
-fichiers de production, mais aussi les sauvegardes accessibles
-sur le réseau (NAS, partages SMB, cloud synchronisé). Les
-victimes n'ont alors plus aucune option de récupération.
-
-Solution — 3 garanties d'immuabilité :
-  1. Permissions UNIX read-only (chmod 444) dès l'écriture
-  2. Manifest SHA-256 signé → toute altération détectable
-  3. Politique de rétention : aucune suppression avant J+30
-     (simulé localement, natif sur S3 Object Lock / Azure)
-
-Architecture "3-2-1 renforcée" :
-  3 copies · 2 supports différents · 1 hors-site immuable
-
-Risque évité : Rançon moyenne en France : 65 000€ (PME, 2024).
-Coût d'un backup immuable bien configuré : ~15€/mois sur S3.
+Un ransomware moderne ne chiffre pas seulement les fichiers de
+production : il s'attaque aussi aux sauvegardes accessibles depuis le
+même réseau (NAS, partage SMB, dossier cloud synchronisé), souvent avec
+les mêmes droits que ceux qu'il vient de compromettre. Un simple
+`chmod 444` sur l'archive ne résiste pas à ça : le compte compromis peut
+se remettre lui-même en écriture avec `chmod` avant de réécrire le
+fichier. La seule protection qui tient sous Linux est l'attribut
+immuable du système de fichiers (`chattr +i`, extension ext2/ext3/ext4),
+qui refuse toute modification — y compris à root — tant qu'il n'a pas
+été explicitement retiré. C'est ce que ce module applique réellement
+(avec repli sur `chmod 444` seul si `chattr` est indisponible : conteneur
+sans `CAP_LINUX_IMMUTABLE`, système de fichiers qui ne supporte pas
+l'attribut comme tmpfs/overlayfs, ou exécution hors Linux). Le manifest
+SHA-256 signé permet en plus de détecter toute altération qui aurait
+malgré tout réussi. En production cloud, l'équivalent est un objet en
+« retention mode » (S3 Object Lock, Azure Immutable Blob Storage), qui
+offre la même garantie sans dépendre d'un attribut de système de
+fichiers local.
 """
 
 import os
@@ -41,6 +29,7 @@ import stat
 import gzip
 import hashlib
 import shutil
+import subprocess
 import sqlite3
 import tarfile
 import threading
@@ -182,16 +171,18 @@ class ImmutableBackup:
     Gestionnaire de backups immuables.
 
     Garanties d'immuabilité locales :
-    - Archive compressée en lecture seule (chmod 444)
+    - Archive verrouillée avec chattr +i (repli sur chmod 444 seul si le
+      système de fichiers ou le conteneur ne supporte pas l'attribut)
     - Répertoire parent en lecture/exécution seule (chmod 555)
     - Manifest SHA-256 vérifiant chaque fichier
     - Registre SQLite horodaté et signé
 
-    Note : Sur Linux, root peut toujours supprimer des fichiers
-    chmod 444. La vraie immuabilité nécessite :
-    - chattr +i (Linux immutable bit) — root résistant
-    - S3 Object Lock (cloud, légalement opposable)
-    - Stockage hors-ligne (bande magnétique, cold storage)
+    Le champ "immutable_chattr" retourné par create() dit honnêtement
+    laquelle des deux protections est réellement active — chmod seul
+    reste contournable par le propriétaire du fichier, chattr +i résiste
+    même à root. Pour une garantie opposable légalement (au-delà d'un
+    attribut de système de fichiers local) : S3 Object Lock, Azure
+    Immutable Blob Storage, ou un stockage hors-ligne (cold storage).
     """
 
     def __init__(self, config: BackupConfig = None):
@@ -207,7 +198,7 @@ class ImmutableBackup:
         1. Calculer les empreintes de tous les fichiers sources
         2. Créer l'archive tar.gz
         3. Calculer l'empreinte de l'archive
-        4. Rendre l'archive immuable (chmod 444)
+        4. Verrouiller l'archive (chattr +i, repli chmod 444)
         5. Signer le manifest
         6. Enregistrer dans le registre
         """
@@ -226,7 +217,7 @@ class ImmutableBackup:
         archive_path = dest_dir / f"{backup_id}.tar.{self.cfg.COMPRESSION}"
 
         # ── Étape 1 : Empreintes sources ──
-        print(f"    🔍  Calcul des empreintes sources...")
+        print(f"    Calcul des empreintes sources...")
         source_checksums = sha256_tree(source)
         file_count = len(source_checksums)
         original_size = sum(
@@ -235,7 +226,7 @@ class ImmutableBackup:
         )
 
         # ── Étape 2 : Compression ──
-        print(f"    📦  Compression ({self.cfg.COMPRESSION})...")
+        print(f"    Compression ({self.cfg.COMPRESSION})...")
         with tarfile.open(
             str(archive_path), f"w:{self.cfg.COMPRESSION}",
             compresslevel=self.cfg.COMPRESS_LEVEL
@@ -249,8 +240,12 @@ class ImmutableBackup:
         archive_checksum = sha256_file(archive_path)
 
         # ── Étape 4 : IMMUTABILITÉ ──
-        print(f"    🔒  Application de l'immutabilité (chmod 444)...")
-        self._make_immutable(archive_path)
+        print("    Verrouillage de l'archive (chattr +i, repli chmod 444)...")
+        chattr_ok = self._make_immutable(archive_path)
+        if chattr_ok:
+            print("    chattr +i posé — résiste même à root.")
+        else:
+            print("    chattr indisponible ici — chmod 444 seul (contournable par le propriétaire du fichier).")
 
         # ── Étape 5 : Manifest signé ──
         manifest = {
@@ -265,7 +260,7 @@ class ImmutableBackup:
             "compression":      self.cfg.COMPRESSION,
             "archive_sha256":   archive_checksum,
             "source_checksums": source_checksums,
-            "immutability":     "chmod_444",
+            "immutability":     "chattr+i" if chattr_ok else "chmod_444_only",
         }
         manifest["signature"] = sign_manifest(manifest)
 
@@ -310,18 +305,34 @@ class ImmutableBackup:
             "sha256":         archive_checksum,
             "expires":        (ts + timedelta(days=self.cfg.RETENTION_DAYS)).strftime("%Y-%m-%d"),
             "immutable":      True,
+            "immutable_chattr": chattr_ok,
         }
 
-    def _make_immutable(self, path: Path):
-        """Rend un fichier en lecture seule."""
-        # chmod 444 : lecture seule pour owner/group/other
+    def _make_immutable(self, path: Path) -> bool:
+        """Verrouille un fichier. Retourne True si l'attribut immuable
+        (chattr +i) a réellement été posé, False si on est retombé sur
+        le seul chmod 444 (protection plus faible, contournable par le
+        propriétaire du fichier)."""
         os.chmod(path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        try:
+            result = subprocess.run(
+                ["chattr", "+i", str(path)],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return False
 
-        # En production Linux : utiliser chattr +i pour résister à root
-        # try:
-        #     subprocess.run(["chattr", "+i", str(path)], check=True)
-        # except Exception:
-        #     pass  # Fallback sur chmod si chattr indisponible
+    def _remove_immutable(self, path: Path) -> None:
+        """Retire l'attribut immuable pour permettre une suppression
+        légitime (retention expirée ou --force admin)."""
+        try:
+            subprocess.run(
+                ["chattr", "-i", str(path)],
+                capture_output=True, text=True, timeout=5,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
 
     def verify(self, backup_id: str) -> dict:
         """
@@ -338,7 +349,7 @@ class ImmutableBackup:
             "verified_at":   datetime.now().isoformat(),
             "checks":        {},
             "integrity":     True,
-            "verdict":       "✅ INTÈGRE",
+            "verdict":       "INTÈGRE",
         }
 
         # Récupérer depuis le registre
@@ -359,7 +370,7 @@ class ImmutableBackup:
         result["checks"]["file_exists"] = exists
         if not exists:
             result["integrity"] = False
-            result["verdict"]   = "❌ ARCHIVE MANQUANTE"
+            result["verdict"]   = "ARCHIVE MANQUANTE"
             return result
 
         # ── Check 2 : SHA-256 ──
@@ -368,7 +379,7 @@ class ImmutableBackup:
         result["checks"]["sha256_match"] = sha_ok
         if not sha_ok:
             result["integrity"] = False
-            result["verdict"]   = "❌ ARCHIVE ALTÉRÉE (SHA-256 mismatch)"
+            result["verdict"]   = "ARCHIVE ALTÉRÉE (SHA-256 mismatch)"
             result["expected"]  = stored_sha256[:20] + "..."
             result["actual"]    = current_sha256[:20] + "..."
 
@@ -383,7 +394,7 @@ class ImmutableBackup:
             result["checks"]["manifest_signature"] = sig_ok
             if not sig_ok:
                 result["integrity"] = False
-                result["verdict"]   = "❌ MANIFEST FALSIFIÉ"
+                result["verdict"]   = "MANIFEST FALSIFIÉ"
 
         # ── Check 4 : Permissions ──
         file_stat = os.stat(archive_path)
@@ -496,9 +507,12 @@ class ImmutableBackup:
 
         dest_dir = Path(row["archive_path"]).parent
 
-        # Retirer les protections avant suppression (admin seulement)
+        # Retirer les protections avant suppression (admin seulement) :
+        # chattr -i d'abord, chmod ensuite, sinon chmod échoue sur un
+        # fichier encore marqué immuable par le système de fichiers.
         for path in dest_dir.rglob("*"):
             if path.is_file():
+                self._remove_immutable(path)
                 os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
         os.chmod(dest_dir, stat.S_IRWXU)
 
@@ -555,7 +569,7 @@ def simulate_ransomware_attack(target: Path) -> dict:
 
 CLOUD_CONFIG_DOCS = """
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-☁️  DÉPLOIEMENT CLOUD — Immuabilité garantie légalement
+Déploiement cloud — immuabilité garantie légalement
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1. AWS S3 Object Lock (WORM — Write Once Read Many)
@@ -590,16 +604,14 @@ CLOUD_CONFIG_DOCS = """
   # → Access policy → Add policy → Time-based retention → 30 days
   # → Lock policy (irréversible !)
 
-3. Stockage local immuable Linux (chattr)
+3. Stockage local immuable Linux (chattr) — c'est ce que fait ce script
 ─────────────────────────────────────────────────────
-  import subprocess
-  # Bit immuable — résiste même à root
-  subprocess.run(['chattr', '+i', archive_path])
+  BackupManager._make_immutable() pose déjà chattr +i sur chaque backup
+  (repli automatique sur chmod 444 si le système de fichiers ou le
+  conteneur ne le permet pas — ext4 seul, généralement pas sur
+  tmpfs/overlayfs). Pour vérifier l'attribut sur un backup existant :
 
-  # Vérifier
-  subprocess.run(['lsattr', archive_path])
-  # Retirer (nécessite root)
-  subprocess.run(['chattr', '-i', archive_path])
+  lsattr chemin/vers/backup.tar.gz    # 'i' dans la sortie = verrouillé
 
 4. Règle 3-2-1 renforcée (recommandation ANSSI)
 ─────────────────────────────────────────────────────
@@ -620,7 +632,7 @@ def run_demo():
     SEP = "═" * 62
 
     print(f"\n{SEP}")
-    print("  🎬  DÉMO — Backup Immuable + Simulation Ransomware")
+    print("  Démo — backup immuable + simulation ransomware")
     print(f"{SEP}\n")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -657,15 +669,15 @@ def run_demo():
 
         total_size = sum(f.stat().st_size for f in source.rglob("*") if f.is_file())
 
-        print(f"  📁  Données de production créées :")
+        print(f"  Données de production créées :")
         print(f"      {len(data_files)} fichiers · {total_size:,} octets")
         for f in sorted(source.rglob("*")):
             if f.is_file():
-                print(f"      📄 {f.relative_to(source)}")
+                print(f"      - {f.relative_to(source)}")
 
         # ── Étape 1 : Création du backup ──
         print(f"\n  {'─'*60}")
-        print(f"  🔒  ÉTAPE 1 : CRÉATION DU BACKUP IMMUABLE")
+        print(f"  Étape 1 : création du backup immuable")
         print(f"  {'─'*60}\n")
 
         cfg = BackupConfig()
@@ -675,83 +687,85 @@ def run_demo():
         print(f"  Démarrage du backup...")
         r = bm.create(source, tags={"type": "quotidien", "env": "production"})
 
-        print(f"\n  ✅  Backup créé avec succès :")
+        print(f"\n  Backup créé avec succès :")
         print(f"      ID       : {r['backup_id']}")
         print(f"      Fichiers : {r['file_count']}")
         print(f"      Taille   : {r['original_size']:,} B → {r['archive_size']:,} B "
               f"(−{r['compression_pct']})")
         print(f"      SHA-256  : {r['sha256'][:32]}...")
         print(f"      Expire   : {r['expires']} (rétention {cfg.RETENTION_DAYS}j)")
-        print(f"      Immuable : {'✅ chmod 444' if r['immutable'] else '❌'}")
+        print(f"      Immuable : {'chattr +i (résiste à root)' if r['immutable_chattr'] else 'chmod 444 seul (chattr indisponible ici)'}")
 
         backup_id = r["backup_id"]
 
         # Vérifier les permissions
         archive_path = Path(r["archive"])
         perms = oct(os.stat(archive_path).st_mode & 0o777)
-        print(f"      Permissions : {perms} (lecture seule ✅)")
+        print(f"      Permissions : {perms} (lecture seule)")
 
         # ── Étape 2 : Vérification d'intégrité initiale ──
         print(f"\n  {'─'*60}")
-        print(f"  🔍  ÉTAPE 2 : VÉRIFICATION D'INTÉGRITÉ")
+        print("  Étape 2 : vérification d'intégrité")
         print(f"  {'─'*60}\n")
 
         v = bm.verify(backup_id)
         print(f"  Résultat : {v['verdict']}")
         for check, val in v["checks"].items():
-            icon = "✅" if val not in (False, None) else "❌"
             if check == "retention_days_left":
-                print(f"    {icon}  {check:<30} : {val} jours")
+                print(f"    {check:<30} : {val} jours")
             elif check == "can_delete":
-                print(f"    {'🔒' if not val else '🔓'}  {check:<30} : {'NON (protégé)' if not val else 'OUI'}")
+                print(f"    {check:<30} : {'NON (protégé)' if not val else 'OUI'}")
             else:
-                print(f"    {icon}  {check:<30} : {val}")
+                print(f"    {check:<30} : {val}")
 
         # ── Étape 3 : RANSOMWARE ──
         print(f"\n  {'─'*60}")
-        print(f"  💀  ÉTAPE 3 : ATTAQUE RANSOMWARE SIMULÉE")
+        print("  Étape 3 : attaque ransomware simulée")
         print(f"  {'─'*60}\n")
 
-        print(f"  ⚠️  Simulation : chiffrement de tous les fichiers de production...")
+        print("  Simulation : chiffrement de tous les fichiers de production...")
         time.sleep(0.3)
 
         attack = simulate_ransomware_attack(source)
 
-        print(f"  🔴  {attack['count']} fichiers CHIFFRÉS / CORROMPUS !")
+        print(f"  {attack['count']} fichiers chiffrés / corrompus :")
         for f in attack["corrupted_files"]:
-            print(f"      💀 {f}")
+            print(f"      - {f}")
 
         print(f"\n  Contenu après attaque :")
         corrupted_content = list(source.rglob("*.csv"))[0].read_bytes()[:60]
         print(f"      {corrupted_content}")
 
         # Tentative de suppression du backup (rétention active)
-        print(f"\n  Ransomware tente de supprimer les backups...")
+        print(f"\n  Le ransomware tente de supprimer les backups...")
         result_del = bm.delete(backup_id, force=False)
         if result_del.get("error"):
-            print(f"  🛡️  Suppression BLOQUÉE : {result_del['error']}")
+            print(f"  Suppression bloquée : {result_del['error']}")
         else:
-            print(f"  ⚠️  Backup supprimé (inattendu !)")
+            print("  Backup supprimé (inattendu !)")
 
         # Tentative d'écriture directe sur l'archive
-        print(f"\n  Ransomware tente d\'écrire sur l\'archive...")
+        print("\n  Le ransomware tente d'écrire sur l'archive...")
         try:
             with open(archive_path, "ab") as f2:
                 f2.write(b"RANSOMWARE_PAYLOAD")
-            print(f"  ⚠️  chmod 444 contourné (sandbox root)")
-            print(f"  💡  Production → chattr +i résiste même à root")
-        except PermissionError:
-            print(f"  🛡️  Écriture REFUSÉE (chmod 444) ✅")
+            if r["immutable_chattr"]:
+                print("  Écriture passée MALGRÉ chattr +i — vérifier les capacités du conteneur (CAP_LINUX_IMMUTABLE).")
+            else:
+                print("  Écriture passée : seul chmod 444 protégeait ce fichier (chattr indisponible), et il tourne ici comme propriétaire du fichier.")
+        except (PermissionError, OSError) as exc:
+            layer = "chattr +i" if r["immutable_chattr"] else "chmod 444"
+            print(f"  Écriture refusée par {layer} ({exc.__class__.__name__}).")
 
         # ── Étape 4 : Détection d'altération ──
         print(f"\n  {chr(8212)*60}")
-        print(f"  🔍  ÉTAPE 4 : DÉTECTION D'ALTÉRATION (SHA-256)")
+        print("  Étape 4 : détection d'altération (SHA-256)")
         print(f"  {chr(8212)*60}\n")
 
         v2 = bm.verify(backup_id)
         sha_ok = v2["checks"].get("sha256_match", True)
         if not sha_ok:
-            print(f"  🔴 Archive altérée détectée → restauration bloquée")
+            print(f"  Archive altérée détectée -> restauration bloquée")
             print(f"  → En prod : restaurer depuis S3 Object Lock / bande hors-ligne")
             # Recréer source propre pour simuler backup S3 intact
             clean_source2 = tmp / "clean_src2"
@@ -762,7 +776,7 @@ def run_demo():
                 full2.write_text(content2, encoding="utf-8")
             r2 = bm.create(clean_source2, tags={"site": "s3-backup"})
             backup_id = r2["backup_id"]
-            print(f"  ✅  Backup secondaire (S3 simulé) : {backup_id[:40]}")
+            print(f"  Backup secondaire (S3 simulé) : {backup_id[:40]}")
         else:
             verdict = v2["verdict"]
             print(f"  {verdict}")
@@ -773,7 +787,7 @@ def run_demo():
         print(f"  {'─'*60}\n")
 
         res = bm.restore(backup_id, restore)
-        print(f"  {res['status'] == 'restored' and '✅' or '❌'}  Restauration : {res['status']}")
+        print(f"  Restauration : {res['status']}")
         print(f"  Dossier  : {res['dest']}")
         print(f"  Fichiers : {res['files']}")
 
@@ -784,30 +798,30 @@ def run_demo():
             content = restored_csv.read_text(encoding="utf-8")
             print(f"    clients/base_clients.csv :")
             for line in content.strip().splitlines():
-                print(f"      ✅ {line}")
+                print(f"      {line}")
 
         restored_json = (restore / source.name / "comptabilite" / "bilan_2024.json")
         if restored_json.exists():
             bilan = json.loads(restored_json.read_text())
             print(f"\n    comptabilite/bilan_2024.json :")
-            print(f"      ✅ CA : {bilan['chiffre_affaires']:,}€ | Net : {bilan['resultat_net']:,}€")
+            print(f"      CA : {bilan["chiffre_affaires"]:,}€ | Net : {bilan["resultat_net"]:,}€")
 
         # ── Bilan ──
         print(f"\n{SEP}")
-        print(f"  📊  BILAN — PROTECTION ANTI-RANSOMWARE")
+        print("  Bilan — protection anti-ransomware")
         print(f"{SEP}")
         print(f"""
-  AVANT le backup immuable :
-  ❌  Attaque ransomware → 100% des fichiers corrompus
-  ❌  Option : payer la rançon (65 000€ en moyenne, PME)
-  ❌  Option : reconstruction manuelle (semaines de travail)
+  Avant le backup immuable :
+  - attaque ransomware -> 100% des fichiers corrompus
+  - option : payer la rançon (65 000€ en moyenne, PME)
+  - option : reconstruction manuelle (semaines de travail)
 
-  APRÈS le backup immuable :
-  ✅  Archive intacte (chmod 444 résiste à l'écriture)
-  ✅  Rétention bloquée (pas de suppression avant J+30)
-  ✅  SHA-256 vérifié (intégrité certifiée avant restauration)
-  ✅  RPO (Recovery Point Objective) : durée depuis dernier backup
-  ✅  RTO (Recovery Time Objective) : quelques minutes
+  Après le backup immuable :
+  - archive protégée (chattr +i si disponible, sinon chmod 444)
+  - rétention bloquée (pas de suppression avant J+30)
+  - SHA-256 vérifié (intégrité certifiée avant restauration)
+  - RPO (Recovery Point Objective) : durée depuis dernier backup
+  - RTO (Recovery Time Objective) : quelques minutes
 
   Coût de cette protection :
     • Script local   : 0€ (ce script)
@@ -815,9 +829,9 @@ def run_demo():
     • vs rançon moy. : 65 000€ + downtime + réputation
 
   Conformité :
-    Art. 32 RGPD  : ✅ Capacité de rétablissement des données
-    ANSSI Guideline: ✅ Règle 3-2-1 + backup hors-ligne logique
-    ISO 27001 A.12.3: ✅ Sauvegarde des données vérifiée
+    Art. 32 RGPD  : Capacité de rétablissement des données
+    ANSSI Guideline: Règle 3-2-1 + backup hors-ligne logique
+    ISO 27001 A.12.3: Sauvegarde des données vérifiée
 """)
 
         print(CLOUD_CONFIG_DOCS)
@@ -854,7 +868,7 @@ def main():
         tags   = {"cli": True}
         print(f"\n  ⏳  Backup de {source}...")
         r = bm.create(source, tags)
-        print(f"\n  ✅  {r['backup_id']}")
+        print(f"\n  {r['backup_id']}")
         print(f"  SHA-256 : {r['sha256']}")
         print(f"  Expire  : {r['expires']}")
         print(f"  Taille  : {r['archive_size']:,} B (−{r['compression_pct']})")
@@ -872,7 +886,7 @@ def main():
             print(USAGE); sys.exit(1)
         dest = Path(args[2])
         r    = bm.restore(args[1], dest)
-        print(f"\n  ✅  Restauré dans {r['dest']}")
+        print(f"\n  Restauré dans {r['dest']}")
 
     elif cmd == "list":
         backups = bm.list_backups()
@@ -891,7 +905,7 @@ def main():
             print(USAGE); sys.exit(1)
         r = bm.delete(args[1])
         if r.get("error"):
-            print(f"\n  🔒  {r['error']}")
+            print(f"\n  {r['error']}")
         else:
             print(f"\n  🗑️   Backup supprimé : {args[1]}")
 
