@@ -1,269 +1,276 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 1 : LE GESTIONNAIRE COFFRE-FORT  ║
-║  Algorithme : scrypt (memory-hard KDF, recommandé OWASP)         ║
-║  Standard   : NIST SP 800-132 / RFC 7914                         ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Gestionnaire de mots de passe en ligne de commande.
 
-Exigence légale : Art. 32 RGPD — "mesures techniques appropriées
-pour garantir un niveau de sécurité adapté au risque."
-
-Solution technique : Hachage avec sel aléatoire (16 octets) +
-scrypt (N=2^17, r=8, p=1) = résistant aux attaques par dictionnaire
-et aux attaques GPU/ASIC.
-
-Risque évité : En cas de fuite de base de données, les mots de passe
-restent inexploitables (crackage prohibitif en coût/temps).
+Un coffre-fort doit pouvoir *rendre* un secret, pas seulement confirmer
+qu'on l'a deviné. La première version de cet outil ne stockait que des
+hachages scrypt à sens unique : elle vérifiait un mot de passe candidat,
+mais ne pouvait jamais restituer le mot de passe original — inutilisable
+comme gestionnaire au sens propre, malgré son nom. Cette version dérive
+une clé du mot de passe maître (scrypt), puis chiffre chaque secret avec
+AES-256-GCM : le déchiffrement, donc la récupération réelle, devient
+possible. Le mot de passe maître lui-même n'est jamais stocké — seul un
+sel et une empreinte de vérification (HMAC) le sont, pour détecter une
+saisie incorrecte sans exposer la clé.
 """
 
-import hashlib
-import hmac
-import os
-import json
+import argparse
 import base64
 import getpass
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import string
+import sys
+import tempfile
 from pathlib import Path
 
-# ─── Paramètres scrypt ────────────────────────────────────────────
-# N = facteur de coût CPU/mémoire (2^17 = 128 Mo RAM par hachage)
-# r = taille du bloc (8 = recommandation RFC 7914)
-# p = parallélisme
-# dklen = longueur du hash en sortie (32 octets = 256 bits)
-SCRYPT_N = 2 ** 14   # 16 384 — ~16 Mo RAM (production recommandée : 2^17 = 128 Mo)
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    print("Dépendance manquante : pip install cryptography", file=sys.stderr)
+    sys.exit(1)
+
+DEFAULT_VAULT = Path("vault.json")
+
+# N=2**15 (~32 Mo de RAM par dérivation) : robuste contre une attaque hors
+# ligne par dictionnaire tout en restant utilisable en CLI interactive
+# (2**17, plus lent, a du sens pour un service qui dérive une seule fois
+# au démarrage — moins pour une commande qu'on tape plusieurs fois par jour).
+SCRYPT_N = 2**15
 SCRYPT_R = 8
 SCRYPT_P = 1
-SCRYPT_DKLEN = 32
-SALT_SIZE = 16       # 128 bits de sel aléatoire
-
-VAULT_FILE = Path("vault.json")
-
-
-# ─── Fonctions cœur ──────────────────────────────────────────────
-
-def generate_salt() -> bytes:
-    """Génère un sel cryptographiquement sûr via os.urandom()."""
-    return os.urandom(SALT_SIZE)
+KEY_LEN = 32
+SALT_LEN = 16
+NONCE_LEN = 12
+CHECK_MESSAGE = b"bouclier-numerique-vault-check-v1"
 
 
-def hash_password(password: str, salt: bytes = None) -> dict:
-    """
-    Hache un mot de passe avec un sel aléatoire en utilisant scrypt.
-    
-    Returns:
-        dict avec 'salt' et 'hash' encodés en base64 (stockage sûr JSON)
-    """
-    if salt is None:
-        salt = generate_salt()
+class VaultError(Exception):
+    """Erreur utilisateur (mauvais mot de passe, service inconnu...)."""
 
-    password_bytes = password.encode("utf-8")
 
-    hashed = hashlib.scrypt(
-        password_bytes,
+def derive_key(master_password: str, salt: bytes) -> bytes:
+    # hashlib.scrypt refuse silencieusement de dépasser 32 Mo par défaut ;
+    # la charge réelle (128*N*r) doit tenir dans maxmem, avec de la marge.
+    return hashlib.scrypt(
+        master_password.encode("utf-8"),
         salt=salt,
         n=SCRYPT_N,
         r=SCRYPT_R,
         p=SCRYPT_P,
-        dklen=SCRYPT_DKLEN
+        dklen=KEY_LEN,
+        maxmem=128 * SCRYPT_N * SCRYPT_R * 2,
     )
 
-    return {
-        "algorithm": "scrypt",
-        "params": {"N": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P, "dklen": SCRYPT_DKLEN},
-        "salt": base64.b64encode(salt).decode(),
-        "hash": base64.b64encode(hashed).decode()
+
+def b64e(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def b64d(data: str) -> bytes:
+    return base64.b64decode(data)
+
+
+def generate_password(length: int = 20) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*-_=+"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+class Vault:
+    """Coffre chiffré : un fichier JSON, une clé dérivée en mémoire."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._key: bytes | None = None
+        self._data: dict | None = None
+
+    @property
+    def exists(self) -> bool:
+        return self.path.exists()
+
+    def create(self, master_password: str) -> None:
+        if self.exists:
+            raise VaultError(f"{self.path} existe déjà.")
+        salt = os.urandom(SALT_LEN)
+        key = derive_key(master_password, salt)
+        check = hmac.new(key, CHECK_MESSAGE, hashlib.sha256).hexdigest()
+        self._data = {"salt": b64e(salt), "check": check, "entries": {}}
+        self._key = key
+        self._save()
+
+    def unlock(self, master_password: str) -> None:
+        if not self.exists:
+            raise VaultError(f"{self.path} introuvable — lancez `init` d'abord.")
+        self._data = json.loads(self.path.read_text(encoding="utf-8"))
+        salt = b64d(self._data["salt"])
+        key = derive_key(master_password, salt)
+        actual = hmac.new(key, CHECK_MESSAGE, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(self._data["check"], actual):
+            raise VaultError("Mot de passe maître incorrect.")
+        self._key = key
+
+    def _save(self) -> None:
+        self.path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
+        os.chmod(self.path, 0o600)
+
+    def add(self, service: str, secret: str, overwrite: bool = False) -> None:
+        if service in self._data["entries"] and not overwrite:
+            raise VaultError(f"'{service}' existe déjà (utilisez --force pour écraser).")
+        nonce = os.urandom(NONCE_LEN)
+        ciphertext = AESGCM(self._key).encrypt(
+            nonce, secret.encode("utf-8"), service.encode("utf-8")
+        )
+        self._data["entries"][service] = {
+            "nonce": b64e(nonce),
+            "ciphertext": b64e(ciphertext),
+        }
+        self._save()
+
+    def get(self, service: str) -> str:
+        entry = self._data["entries"].get(service)
+        if entry is None:
+            raise VaultError(f"'{service}' introuvable dans le coffre.")
+        nonce = b64d(entry["nonce"])
+        ciphertext = b64d(entry["ciphertext"])
+        # L'associated data (nom du service) empêche de recoller le
+        # ciphertext d'une entrée sur le nom d'une autre.
+        plaintext = AESGCM(self._key).decrypt(nonce, ciphertext, service.encode("utf-8"))
+        return plaintext.decode("utf-8")
+
+    def remove(self, service: str) -> None:
+        if service not in self._data["entries"]:
+            raise VaultError(f"'{service}' introuvable.")
+        del self._data["entries"][service]
+        self._save()
+
+    def list_services(self) -> list[str]:
+        return sorted(self._data["entries"])
+
+
+def prompt_master(confirm: bool = False) -> str:
+    pwd = getpass.getpass("Mot de passe maître : ")
+    if confirm:
+        again = getpass.getpass("Confirmer : ")
+        if pwd != again:
+            raise VaultError("Les mots de passe maîtres ne correspondent pas.")
+    return pwd
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    vault = Vault(Path(args.vault))
+    master = prompt_master(confirm=True)
+    vault.create(master)
+    print(f"Coffre créé : {vault.path}")
+
+
+def cmd_add(args: argparse.Namespace) -> None:
+    vault = Vault(Path(args.vault))
+    vault.unlock(prompt_master())
+    if args.generate is not None:
+        secret = generate_password(args.generate)
+        print(f"Mot de passe généré : {secret}")
+    else:
+        secret = getpass.getpass(f"Secret pour '{args.service}' : ")
+    vault.add(args.service, secret, overwrite=args.force)
+    print(f"'{args.service}' stocké.")
+
+
+def cmd_get(args: argparse.Namespace) -> None:
+    vault = Vault(Path(args.vault))
+    vault.unlock(prompt_master())
+    print(vault.get(args.service))
+
+
+def cmd_list(args: argparse.Namespace) -> None:
+    vault = Vault(Path(args.vault))
+    vault.unlock(prompt_master())
+    services = vault.list_services()
+    if not services:
+        print("Le coffre est vide.")
+        return
+    for service in services:
+        print(service)
+
+
+def cmd_rm(args: argparse.Namespace) -> None:
+    vault = Vault(Path(args.vault))
+    vault.unlock(prompt_master())
+    vault.remove(args.service)
+    print(f"'{args.service}' supprimé.")
+
+
+def run_demo() -> None:
+    """Démo non-interactive : coffre temporaire, nettoyé à la fin."""
+    with tempfile.TemporaryDirectory() as tmp:
+        vault = Vault(Path(tmp) / "demo_vault.json")
+        master = "Demo-Master-Passphrase-42!"
+
+        vault.create(master)
+        print(f"Coffre de démo créé ({vault.path}, supprimé en fin de script).")
+
+        vault.add("github", "correct-horse-battery-staple")
+        print("Secret stocké pour 'github'.")
+
+        # Ré-ouverture du coffre pour prouver que la clé se re-dérive à
+        # l'identique et que le secret est bien récupérable, pas juste
+        # vérifiable comme dans l'ancienne version.
+        fresh = Vault(vault.path)
+        fresh.unlock(master)
+        recovered = fresh.get("github")
+        print(f"Secret récupéré pour 'github' : {recovered}")
+        assert recovered == "correct-horse-battery-staple"
+        print("-> récupération correcte : ce n'est pas qu'un vérificateur.")
+
+        try:
+            fresh.unlock("mauvais-mot-de-passe")
+        except VaultError as exc:
+            print(f"Mauvais mot de passe maître rejeté : {exc}")
+
+        print(f"Services dans le coffre : {fresh.list_services()}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Gestionnaire de mots de passe chiffré (AES-256-GCM, scrypt)."
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    for name in ("init", "add", "get", "list", "rm"):
+        p = sub.add_parser(name)
+        p.add_argument("--vault", default=str(DEFAULT_VAULT), help="Chemin du coffre (JSON).")
+        if name == "add":
+            p.add_argument("service")
+            p.add_argument("--generate", type=int, nargs="?", const=20, metavar="LONGUEUR")
+            p.add_argument("--force", action="store_true")
+        elif name in ("get", "rm"):
+            p.add_argument("service")
+
+    sub.add_parser("demo", help="Démonstration autonome, sans toucher à un vrai coffre.")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command == "demo":
+        run_demo()
+        return
+
+    handlers = {
+        "init": cmd_init,
+        "add": cmd_add,
+        "get": cmd_get,
+        "list": cmd_list,
+        "rm": cmd_rm,
     }
-
-
-def verify_password(password: str, stored_record: dict) -> bool:
-    """
-    Vérifie un mot de passe contre un enregistrement stocké.
-    Utilise hmac.compare_digest() pour éviter les timing attacks.
-    """
-    salt = base64.b64decode(stored_record["salt"])
-    stored_hash = base64.b64decode(stored_record["hash"])
-    params = stored_record["params"]
-
-    candidate_hash = hashlib.scrypt(
-        password.encode("utf-8"),
-        salt=salt,
-        n=params["N"],
-        r=params["r"],
-        p=params["p"],
-        dklen=params["dklen"]
-    )
-
-    # compare_digest : comparaison en temps constant → résistant aux timing attacks
-    return hmac.compare_digest(candidate_hash, stored_hash)
-
-
-# ─── Gestionnaire de coffre-fort ─────────────────────────────────
-
-def load_vault() -> dict:
-    """Charge le coffre-fort depuis le fichier JSON."""
-    if VAULT_FILE.exists():
-        with open(VAULT_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-
-def save_vault(vault: dict):
-    """Sauvegarde le coffre-fort (permissions 600 : owner uniquement)."""
-    with open(VAULT_FILE, "w") as f:
-        json.dump(vault, f, indent=2)
-    # Restreindre les permissions : lecture/écriture owner uniquement
-    os.chmod(VAULT_FILE, 0o600)
-
-
-def cmd_add(vault: dict):
-    """Ajoute un nouveau mot de passe dans le coffre."""
-    service = input("Service (ex: github, email) : ").strip()
-    if not service:
-        print("❌  Nom de service invalide.")
-        return
-
-    if service in vault:
-        confirm = input(f"⚠️  '{service}' existe déjà. Écraser ? (o/N) : ").strip().lower()
-        if confirm != "o":
-            print("Annulé.")
-            return
-
-    password = getpass.getpass("Mot de passe : ")
-    confirm_pwd = getpass.getpass("Confirmer le mot de passe : ")
-
-    if password != confirm_pwd:
-        print("❌  Les mots de passe ne correspondent pas.")
-        return
-
-    if len(password) < 8:
-        print("⚠️  Avertissement : mot de passe trop court (< 8 caractères).")
-
-    print("⏳  Hachage en cours (scrypt N=2^17)...")
-    record = hash_password(password)
-    vault[service] = record
-    save_vault(vault)
-
-    print(f"✅  Mot de passe pour '{service}' stocké avec succès.")
-    print(f"    Salt : {record['salt'][:20]}...")
-    print(f"    Hash : {record['hash'][:20]}...")
-
-
-def cmd_verify(vault: dict):
-    """Vérifie si un mot de passe correspond à l'entrée stockée."""
-    service = input("Service à vérifier : ").strip()
-
-    if service not in vault:
-        print(f"❌  Service '{service}' introuvable dans le coffre.")
-        return
-
-    password = getpass.getpass("Mot de passe à vérifier : ")
-    print("⏳  Vérification en cours...")
-
-    if verify_password(password, vault[service]):
-        print("✅  MOT DE PASSE CORRECT — Authentification réussie.")
-    else:
-        print("❌  MOT DE PASSE INCORRECT — Accès refusé.")
-
-
-def cmd_list(vault: dict):
-    """Liste les services stockés (sans afficher les hashes)."""
-    if not vault:
-        print("📭  Le coffre est vide.")
-        return
-
-    print(f"\n📋  Services stockés ({len(vault)}) :")
-    for service, record in vault.items():
-        algo = record.get("algorithm", "inconnu")
-        print(f"   • {service:<20} [{algo}]")
-    print()
-
-
-def cmd_delete(vault: dict):
-    """Supprime une entrée du coffre."""
-    service = input("Service à supprimer : ").strip()
-
-    if service not in vault:
-        print(f"❌  Service '{service}' introuvable.")
-        return
-
-    confirm = input(f"⚠️  Supprimer '{service}' définitivement ? (o/N) : ").strip().lower()
-    if confirm == "o":
-        del vault[service]
-        save_vault(vault)
-        print(f"🗑️   '{service}' supprimé du coffre.")
-    else:
-        print("Annulé.")
-
-
-def cmd_demo():
-    """Démo rapide sans interactivité pour tester le script."""
-    print("\n═══ DÉMO : Hachage & Vérification ═══\n")
-    test_password = "MonSuperMotDePasse123!"
-
-    print(f"Mot de passe original : {test_password}")
-    print("⏳  Hachage en cours...")
-
-    record = hash_password(test_password)
-
-    print(f"\n✅  Hash généré :")
-    print(f"   Algorithme : {record['algorithm']} (N={record['params']['N']})")
-    print(f"   Salt (b64) : {record['salt']}")
-    print(f"   Hash (b64) : {record['hash']}")
-
-    print(f"\n🔍  Vérification avec le bon mot de passe...")
-    result = verify_password(test_password, record)
-    print(f"   → {'✅ CORRECT' if result else '❌ INCORRECT'}")
-
-    print(f"\n🔍  Vérification avec un mauvais mot de passe...")
-    result2 = verify_password("mauvais_mot_de_passe", record)
-    print(f"   → {'✅ CORRECT' if result2 else '❌ INCORRECT'}")
-
-    print(f"\n🔍  Deux hachages du même mot de passe = deux hashs différents (sel unique) :")
-    r1 = hash_password(test_password)
-    r2 = hash_password(test_password)
-    print(f"   Hash 1 : {r1['hash'][:30]}...")
-    print(f"   Hash 2 : {r2['hash'][:30]}...")
-    print(f"   Identiques ? {'Oui ⚠️' if r1['hash'] == r2['hash'] else 'Non ✅ (normal : sel différent)'}")
-
-
-# ─── Interface CLI ────────────────────────────────────────────────
-
-MENU = """
-╔═══════════════════════════════════╗
-║  🛡️  COFFRE-FORT — MENU PRINCIPAL ║
-╠═══════════════════════════════════╣
-║  1. Ajouter un mot de passe        ║
-║  2. Vérifier un mot de passe       ║
-║  3. Lister les services            ║
-║  4. Supprimer un service           ║
-║  5. Démo technique                 ║
-║  0. Quitter                        ║
-╚═══════════════════════════════════╝
-"""
-
-def main():
-    print(__doc__)
-    vault = load_vault()
-
-    while True:
-        print(MENU)
-        choice = input("Choix : ").strip()
-
-        if choice == "1":
-            cmd_add(vault)
-        elif choice == "2":
-            cmd_verify(vault)
-        elif choice == "3":
-            cmd_list(vault)
-        elif choice == "4":
-            cmd_delete(vault)
-        elif choice == "5":
-            cmd_demo()
-        elif choice == "0":
-            print("👋  Au revoir.")
-            break
-        else:
-            print("Choix invalide.")
+    try:
+        handlers[args.command](args)
+    except VaultError as exc:
+        print(f"Erreur : {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

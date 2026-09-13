@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 11 : GÉNÉRATEUR DE DPA           ║
-║  Obligation : Art. 28 RGPD — Contrat sous-traitant obligatoire  ║
-║  Format     : .docx signable · Modèle CNIL 2024                 ║
-║  Clauses    : 12 clauses obligatoires + clauses recommandées     ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Générateur de contrat de sous-traitance RGPD (DPA), Art. 28.
 
-Exigence légale : Art. 28 §3 RGPD — Tout traitement effectué
+Produit un .docx signable directement en Python via python-docx — la
+première version de cet outil générait le document en shellant vers un
+script Node.js qui dépendait du module npm `docx`, jamais déclaré nulle
+part (pas de package.json) : ça ne pouvait jamais tourner sur une
+installation propre, seulement dans l'environnement où ça a été écrit.
+Le contenu légal (12 clauses obligatoires, calqué sur les lignes
+directrices EDPB 07/2020 et le modèle CNIL) reste inchangé.
+
+Art. 28 §3 RGPD — Tout traitement effectué
 par un sous-traitant doit être régi par un contrat liant le
 sous-traitant au responsable de traitement, stipulant notamment
 que le sous-traitant :
@@ -33,12 +35,20 @@ forme, notamment dans le cloud et le marketing.
 import os
 import sys
 import json
-import subprocess
-import tempfile
 import hashlib
 from pathlib import Path
 from datetime import datetime, date
 from typing import Optional
+
+try:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+except ImportError:
+    print("Dépendance manquante : pip install python-docx", file=sys.stderr)
+    sys.exit(1)
 
 # ================================================================
 # MODÈLES DE CLAUSES (conforme CNIL + EDPB Guidelines 07/2020)
@@ -341,394 +351,164 @@ def verifier_conformite_dpa(data: dict) -> dict:
 
 
 # ================================================================
-# GÉNÉRATION DU DOCUMENT WORD
+# GÉNÉRATION DU DOCUMENT WORD (python-docx natif)
 # ================================================================
 
-def generate_docx(data: dict, output_path: Path) -> str:
-    """Génère le DPA en format .docx via docx-js."""
+BLUE = "1F3864"
+SLATE = "2E4057"
+LIGHTBLUE = "D6E4F0"
+GRAY = "F5F5F5"
 
-    js_data = json.dumps(data, ensure_ascii=False, indent=2)
 
-    # Construire les listes d'annexe
-    finalites_items = ",\n".join(
-        f'new Paragraph({{numbering:{{reference:"numbers",level:0}}, children:[new TextRun("{f}")]}})'
-        for f in (data["finalites"] or ["À définir"])
-    )
-    cats_personnes_items = ",\n".join(
-        f'new Paragraph({{numbering:{{reference:"bullets",level:0}}, children:[new TextRun("{c}")]}})'
-        for c in (data["categories_personnes"] or ["À définir"])
-    )
-    cats_donnees_items = ",\n".join(
-        f'new Paragraph({{numbering:{{reference:"bullets",level:0}}, children:[new TextRun("{c}")]}})'
-        for c in (data["categories_donnees"] or ["À définir"])
-    )
-    mesures_items = ",\n".join(
-        f'new Paragraph({{numbering:{{reference:"bullets",level:0}}, children:[new TextRun("{m}")]}})'
-        for m in (data["mesures_securite"] or ["Mesures standard de sécurité"])
-    )
-    sst_items = ",\n".join(
-        f'new Paragraph({{numbering:{{reference:"bullets",level:0}}, children:[new TextRun("{s}")]}})'
-        for s in (data.get("liste_sst") or ["Aucun sous-traitant ultérieur prévu"])
-    )
+def _shade_cell(cell, color_hex: str) -> None:
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), color_hex)
+    cell._tc.get_or_add_tcPr().append(shd)
 
-    # Construire les paragraphes des clauses
-    clauses_js = ""
-    for key, clause in data["clauses"].items():
-        escaped_titre   = clause["titre"].replace('"', '\\"')
-        escaped_article = clause["article"].replace('"', '\\"')
-        escaped_contenu = (
-            clause["contenu"]
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", " ")
-        )
-        clauses_js += f"""
-        // Clause: {escaped_titre}
-        new Paragraph({{
-            heading: HeadingLevel.HEADING_2,
-            children: [new TextRun("{escaped_article} — {escaped_titre}")]
-        }}),
-        new Paragraph({{
-            spacing: {{before: 80, after: 160}},
-            children: [new TextRun("{escaped_contenu}")]
-        }}),
-        """
+
+def _cell_text(cell, text: str, *, bold: bool = False, color: str | None = None, size: int = 10) -> None:
+    cell.text = ""
+    run = cell.paragraphs[0].add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+    if color:
+        run.font.color.rgb = RGBColor.from_string(color)
+
+
+def _cell_extra_line(cell, text: str, *, bold: bool = False, size: int = 10) -> None:
+    run = cell.add_paragraph().add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+
+
+def generate_docx(data: dict, output_path: Path) -> Path:
+    """Construit le DPA en .docx natif — aucune dépendance externe au runtime."""
+    output_path = Path(output_path)
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(10.5)
+
+    title = doc.add_heading("ACCORD DE TRAITEMENT DES DONNÉES (DPA)", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    subtitle = doc.add_paragraph("Conformément à l'Article 28 du Règlement (UE) 2016/679 (RGPD)")
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     date_fr = datetime.fromisoformat(data["date_creation"]).strftime("%d/%m/%Y")
+    meta_line = doc.add_paragraph()
+    meta_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = meta_line.add_run(f"Réf. {data['ref']}  ·  v{data['version']}  ·  {date_fr}")
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
 
-    js_script = f"""
-const fs = require('fs');
-const {{
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
-  LevelFormat, PageNumber, Footer, Header, TabStopType, TabStopPosition
-}} = require('docx');
-
-const BLUE      = "1F3864";
-const LIGHTBLUE = "D6E4F0";
-const GRAY      = "F5F5F5";
-const border    = {{ style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }};
-const borders   = {{ top: border, bottom: border, left: border, right: border }};
-const noBorder  = {{ style: BorderStyle.NONE, size: 0, color: "FFFFFF" }};
-const noBorders = {{ top: noBorder, bottom: noBorder, left: noBorder, right: noBorder }};
-
-function cell(text, opts={{}}) {{
-  return new TableCell({{
-    borders,
-    width: {{ size: opts.width || 4683, type: WidthType.DXA }},
-    shading: {{ fill: opts.fill || "FFFFFF", type: ShadingType.CLEAR }},
-    margins: {{ top: 100, bottom: 100, left: 140, right: 140 }},
-    children: [new Paragraph({{
-      children: [new TextRun({{ text, bold: opts.bold||false, size: 22 }})]
-    }})]
-  }});
-}}
-
-function section(title) {{
-  return new Paragraph({{
-    heading: HeadingLevel.HEADING_1,
-    children: [new TextRun(title)]
-  }});
-}}
-
-const doc = new Document({{
-  numbering: {{
-    config: [
-      {{ reference: "bullets",
-         levels: [{{ level: 0, format: LevelFormat.BULLET, text: "\\u2022",
-           alignment: AlignmentType.LEFT,
-           style: {{ paragraph: {{ indent: {{ left: 720, hanging: 360 }} }} }} }}] }},
-      {{ reference: "numbers",
-         levels: [{{ level: 0, format: LevelFormat.DECIMAL, text: "%1.",
-           alignment: AlignmentType.LEFT,
-           style: {{ paragraph: {{ indent: {{ left: 720, hanging: 360 }} }} }} }}] }},
+    # Table des parties
+    parties = doc.add_table(rows=5, cols=2)
+    parties.style = "Table Grid"
+    _cell_text(parties.cell(0, 0), "RESPONSABLE DU TRAITEMENT", bold=True, color="FFFFFF")
+    _shade_cell(parties.cell(0, 0), BLUE)
+    _cell_text(parties.cell(0, 1), "SOUS-TRAITANT", bold=True, color="FFFFFF")
+    _shade_cell(parties.cell(0, 1), SLATE)
+    rows = [
+        (data["rt_nom"], data["st_nom"]),
+        (data["rt_forme"], data["st_forme"]),
+        (data["rt_adresse"], data["st_adresse"]),
+        (f"DPO : {data['rt_dpo_email'] or 'N/A'}", f"DPO : {data['st_dpo_email'] or 'N/A'}"),
     ]
-  }},
-  styles: {{
-    default: {{
-      document: {{ run: {{ font: "Arial", size: 22 }} }}
-    }},
-    paragraphStyles: [
-      {{ id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal",
-         quickFormat: true,
-         run: {{ size: 28, bold: true, font: "Arial", color: BLUE }},
-         paragraph: {{
-           spacing: {{ before: 360, after: 120 }},
-           border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 4, color: BLUE, space: 4 }} }},
-           outlineLevel: 0
-         }} }},
-      {{ id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal",
-         quickFormat: true,
-         run: {{ size: 24, bold: true, font: "Arial", color: "2E4057" }},
-         paragraph: {{ spacing: {{ before: 240, after: 80 }}, outlineLevel: 1 }} }},
-      {{ id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal",
-         quickFormat: true,
-         run: {{ size: 22, bold: true, font: "Arial", color: "444444" }},
-         paragraph: {{ spacing: {{ before: 160, after: 60 }}, outlineLevel: 2 }} }},
-    ]
-  }},
-  sections: [{{
-    properties: {{
-      page: {{
-        size: {{ width: 11906, height: 16838 }},
-        margin: {{ top: 1134, bottom: 1134, left: 1418, right: 1134 }}
-      }}
-    }},
-    headers: {{
-      default: new Header({{
-        children: [new Paragraph({{
-          border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 4, color: BLUE, space: 6 }} }},
-          children: [
-            new TextRun({{ text: "ACCORD DE TRAITEMENT DES DONNÉES (DPA)", bold: true,
-                           size: 20, color: BLUE }}),
-            new TextRun({{ text: "   \\u2022   Réf. {data['ref']}", size: 18, color: "888888" }})
-          ]
-        }})]
-      }})
-    }},
-    footers: {{
-      default: new Footer({{
-        children: [new Paragraph({{
-          border: {{ top: {{ style: BorderStyle.SINGLE, size: 2, color: "CCCCCC", space: 4 }} }},
-          tabStops: [{{ type: TabStopType.RIGHT, position: 9026 }}],
-          children: [
-            new TextRun({{ text: "Confidentiel — {data['rt_nom']} / {data['st_nom']}", size: 18, color: "888888" }}),
+    for i, (left, right) in enumerate(rows, start=1):
+        _cell_text(parties.cell(i, 0), left or "")
+        _cell_text(parties.cell(i, 1), right or "")
 
-          ]
-        }})]
-      }})
-    }},
-    children: [
+    doc.add_paragraph()
 
-      // ═══ PAGE DE GARDE ═══
-      new Paragraph({{ spacing: {{ before: 720, after: 0 }} , children: [] }}),
+    # Métadonnées du contrat
+    meta_table = doc.add_table(rows=3, cols=2)
+    meta_table.style = "Table Grid"
+    for i, (label, value) in enumerate([
+        ("Référence", data["ref"]),
+        ("Objet", data["objet_contrat"] or "Prestation de services définie au contrat principal"),
+        ("Version", f"v{data['version']} — hash {data['content_hash']}"),
+    ]):
+        _cell_text(meta_table.cell(i, 0), label, bold=True)
+        _shade_cell(meta_table.cell(i, 0), GRAY)
+        _cell_text(meta_table.cell(i, 1), value)
 
-      // Bandeau titre
-      new Paragraph({{
-        alignment: AlignmentType.CENTER,
-        spacing: {{ before: 0, after: 240 }},
-        border: {{
-          top:    {{ style: BorderStyle.SINGLE, size: 24, color: BLUE }},
-          left:   {{ style: BorderStyle.SINGLE, size: 8,  color: BLUE }},
-          bottom: {{ style: BorderStyle.SINGLE, size: 8,  color: BLUE }},
-          right:  {{ style: BorderStyle.SINGLE, size: 8,  color: BLUE }},
-        }},
-        shading: {{ fill: BLUE, type: ShadingType.CLEAR }},
-        children: [
-          new TextRun({{ text: "", size: 14, break: 1 }} ),
-          new TextRun({{ text: "ACCORD DE TRAITEMENT DES DONNÉES", bold: true, size: 40, color: "FFFFFF" }}),
-          new TextRun({{ text: "Data Processing Agreement (DPA)", size: 24, color: "D0E4F7", break: 1 }}),
-          new TextRun({{ text: "Conformément à l'Article 28 du Règlement (UE) 2016/679 (RGPD)", size: 20, color: "AACCE0", break: 1 }}),
-          new TextRun({{ text: "", size: 14, break: 1 }}),
-        ]
-      }}),
+    # Clauses obligatoires
+    doc.add_heading("I. Clauses obligatoires (Art. 28 RGPD)", level=1)
+    for clause in data["clauses"].values():
+        doc.add_heading(f"{clause['article']} — {clause['titre']}", level=2)
+        doc.add_paragraph(clause["contenu"])
 
-      new Paragraph({{ spacing: {{ before: 360, after: 120 }}, children: [] }}),
-
-      // Table des parties
-      new Table({{
-        width: {{ size: 9026, type: WidthType.DXA }},
-        columnWidths: [4513, 4513],
-        rows: [
-          new TableRow({{
-            children: [
-              new TableCell({{
-                borders,
-                width: {{ size: 4513, type: WidthType.DXA }},
-                shading: {{ fill: BLUE, type: ShadingType.CLEAR }},
-                margins: {{ top: 120, bottom: 120, left: 180, right: 180 }},
-                children: [
-                  new Paragraph({{ children: [new TextRun({{ text: "RESPONSABLE DU TRAITEMENT", bold: true, color: "FFFFFF", size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['rt_nom']}", bold: true, color: "FFFFFF", size: 26 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['rt_forme']}", color: "AACCE0", size: 20 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['rt_adresse']}", color: "D0E4F7", size: 18 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "DPO : {data['rt_dpo_email']}", color: "AACCE0", size: 18 }})] }}),
-                ]
-              }}),
-              new TableCell({{
-                borders,
-                width: {{ size: 4513, type: WidthType.DXA }},
-                shading: {{ fill: LIGHTBLUE, type: ShadingType.CLEAR }},
-                margins: {{ top: 120, bottom: 120, left: 180, right: 180 }},
-                children: [
-                  new Paragraph({{ children: [new TextRun({{ text: "SOUS-TRAITANT", bold: true, color: BLUE, size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['st_nom']}", bold: true, color: "1a1a1a", size: 26 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['st_forme']}", color: "555555", size: 20 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['st_adresse']}", color: "555555", size: 18 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "DPO : {data['st_dpo_email'] or 'N/A'}", color: "555555", size: 18 }})] }}),
-                ]
-              }}),
-            ]
-          }})
-        ]
-      }}),
-
-      new Paragraph({{ spacing: {{ before: 240, after: 120 }}, children: [] }}),
-
-      // Métadonnées du contrat
-      new Table({{
-        width: {{ size: 9026, type: WidthType.DXA }},
-        columnWidths: [2400, 4200, 2426],
-        rows: [
-          new TableRow({{
-            children: [
-              new TableCell({{ borders, width: {{ size: 2400, type: WidthType.DXA }},
-                shading: {{ fill: GRAY, type: ShadingType.CLEAR }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "Référence", bold: true, size: 20 }})] }})] }}),
-              new TableCell({{ borders, width: {{ size: 4200, type: WidthType.DXA }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "{data['ref']}", size: 20 }})] }})] }}),
-              new TableCell({{ borders, width: {{ size: 2426, type: WidthType.DXA }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                shading: {{ fill: GRAY, type: ShadingType.CLEAR }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "Date : {date_fr}", size: 20 }})] }})] }}),
-            ]
-          }}),
-          new TableRow({{
-            children: [
-              new TableCell({{ borders, width: {{ size: 2400, type: WidthType.DXA }},
-                shading: {{ fill: GRAY, type: ShadingType.CLEAR }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "Objet", bold: true, size: 20 }})] }})] }}),
-              new TableCell({{ borders, columnSpan: 2, width: {{ size: 6626, type: WidthType.DXA }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "{data['objet_contrat'] or 'Prestation de services définie au contrat principal'}", size: 20 }})] }})] }}),
-            ]
-          }}),
-          new TableRow({{
-            children: [
-              new TableCell({{ borders, width: {{ size: 2400, type: WidthType.DXA }},
-                shading: {{ fill: GRAY, type: ShadingType.CLEAR }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "Version", bold: true, size: 20 }})] }})] }}),
-              new TableCell({{ borders, width: {{ size: 4200, type: WidthType.DXA }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "v{data['version']}  —  Hash : {data['content_hash']}", size: 18, color: "888888" }})] }})] }}),
-              new TableCell({{ borders, width: {{ size: 2426, type: WidthType.DXA }},
-                margins: {{ top: 80, bottom: 80, left: 140, right: 140 }},
-                children: [new Paragraph({{ children: [new TextRun({{ text: "Pays ST : {data['pays_traitement']}", size: 20 }})] }})] }}),
-            ]
-          }}),
-        ]
-      }}),
-
-      // ═══ CLAUSES ═══
-      new Paragraph({{ children: [new TextRun({{ text: "", break: 1 }})] }}),
-      section("I. CLAUSES OBLIGATOIRES (Art. 28 RGPD)"),
-
-      {clauses_js}
-
-      // ═══ ANNEXES ═══
-      section("II. ANNEXE 1 — DESCRIPTION DU TRAITEMENT"),
-
-      new Paragraph({{ heading: HeadingLevel.HEADING_2, children: [new TextRun("A. Finalités du traitement")] }}),
-      {finalites_items},
-
-      new Paragraph({{ heading: HeadingLevel.HEADING_2, children: [new TextRun("B. Catégories de personnes concernées")] }}),
-      {cats_personnes_items},
-
-      new Paragraph({{ heading: HeadingLevel.HEADING_2, children: [new TextRun("C. Catégories de données traitées")] }}),
-      {cats_donnees_items},
-
-      new Paragraph({{ heading: HeadingLevel.HEADING_2, children: [new TextRun("D. Volume estimé et durée")] }}),
-      new Paragraph({{ children: [new TextRun("Volume estimé : {data['volume_estime'] or 'À préciser'}")] }}),
-      new Paragraph({{ children: [new TextRun("Durée du traitement : {data['duree']}")] }}),
-
-      {"new Paragraph({ children: [new TextRun({ text: '⚠️ ATTENTION : Ce traitement inclut des données sensibles (Art. 9 RGPD). Une AIPD est obligatoire.', bold: true, color: 'C00000', size: 22 })] })," if data.get("donnees_sensibles") else ""}
-
-      section("III. ANNEXE 2 — MESURES DE SÉCURITÉ (Art. 32 RGPD)"),
-
-      new Paragraph({{ spacing: {{before: 80, after: 120}}, children: [new TextRun("Le Sous-traitant met en oeuvre les mesures techniques et organisationnelles suivantes :")] }}),
-      {mesures_items},
-
-      {"new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Certifications et conformités')] }), new Paragraph({ children: [new TextRun('" + ', '.join(data.get('certifications') or []) + "')] })," if data.get("certifications") else ""}
-
-      section("IV. ANNEXE 3 — SOUS-TRAITANTS ULTÉRIEURS"),
-
-      new Paragraph({{ spacing: {{before: 80, after: 120}}, children: [
-        new TextRun("Autorisation : {'Spécifique (au cas par cas)' if data.get('autorisation_sst') == 'specifique' else 'Générale (avec notification préalable)'}. ")
-      ]}}),
-      {sst_items},
-
-      {"section('V. ANNEXE 4 — TRANSFERTS HORS UE')," if data.get("transfert_hors_ue") else ""}
-      {"new Paragraph({ children: [new TextRun('Pays de traitement : " + data.get("pays_traitement","?") + "') ] })," if data.get("transfert_hors_ue") else ""}
-      {"new Paragraph({ children: [new TextRun('Mécanisme de transfert : " + (data.get("mecanisme_transfert") or "À définir") + "') ] })," if data.get("transfert_hors_ue") else ""}
-
-      // ═══ SIGNATURES ═══
-      section("V. SIGNATURES"),
-
-      new Paragraph({{ spacing: {{before: 120, after: 360}}, children: [
-        new TextRun("Les parties soussignées déclarent avoir lu et approuvé l'intégralité du présent Accord de Traitement des Données. Cet accord entre en vigueur à la date de la dernière signature.")
-      ]}}),
-
-      new Table({{
-        width: {{ size: 9026, type: WidthType.DXA }},
-        columnWidths: [4513, 4513],
-        rows: [
-          new TableRow({{
-            children: [
-              new TableCell({{
-                borders,
-                width: {{ size: 4513, type: WidthType.DXA }},
-                shading: {{ fill: LIGHTBLUE, type: ShadingType.CLEAR }},
-                margins: {{ top: 100, bottom: 100, left: 180, right: 180 }},
-                children: [
-                  new Paragraph({{ children: [new TextRun({{ text: "Responsable du traitement", bold: true, size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['rt_nom']}", size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "Représenté par : {data['rt_representant'] or '___________________'}", size: 20 }})] }}),
-                  new Paragraph({{ spacing: {{before: 480, after: 0}}, children: [new TextRun("Date et signature :")] }}),
-                  new Paragraph({{ spacing: {{before: 480, after: 0}}, children: [new TextRun("____________________________")] }}),
-                ]
-              }}),
-              new TableCell({{
-                borders,
-                width: {{ size: 4513, type: WidthType.DXA }},
-                shading: {{ fill: GRAY, type: ShadingType.CLEAR }},
-                margins: {{ top: 100, bottom: 100, left: 180, right: 180 }},
-                children: [
-                  new Paragraph({{ children: [new TextRun({{ text: "Sous-traitant", bold: true, size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "{data['st_nom']}", size: 22 }})] }}),
-                  new Paragraph({{ children: [new TextRun({{ text: "Représenté par : {data['st_representant'] or '___________________'}", size: 20 }})] }}),
-                  new Paragraph({{ spacing: {{before: 480, after: 0}}, children: [new TextRun("Date et signature :")] }}),
-                  new Paragraph({{ spacing: {{before: 480, after: 0}}, children: [new TextRun("____________________________")] }}),
-                ]
-              }}),
-            ]
-          }})
-        ]
-      }}),
-
-    ]
-  }}]
-}});
-
-Packer.toBuffer(doc).then(buffer => {{
-  fs.writeFileSync('{output_path}', buffer);
-  console.log('OK:' + buffer.length);
-}}).catch(e => {{
-  console.error('ERR:' + e.message);
-  process.exit(1);
-}});
-"""
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".js",
-                                      delete=False, encoding="utf-8") as f:
-        f.write(js_script)
-        js_path = f.name
-
-    try:
-        result = subprocess.run(
-            ["node", js_path],
-            capture_output=True, text=True, timeout=30
+    # Annexe 1 — description du traitement
+    doc.add_heading("II. Annexe 1 — Description du traitement", level=1)
+    doc.add_heading("A. Finalités du traitement", level=2)
+    for item in (data["finalites"] or ["À définir"]):
+        doc.add_paragraph(item, style="List Number")
+    doc.add_heading("B. Catégories de personnes concernées", level=2)
+    for item in (data["categories_personnes"] or ["À définir"]):
+        doc.add_paragraph(item, style="List Bullet")
+    doc.add_heading("C. Catégories de données traitées", level=2)
+    for item in (data["categories_donnees"] or ["À définir"]):
+        doc.add_paragraph(item, style="List Bullet")
+    doc.add_heading("D. Volume estimé et durée", level=2)
+    doc.add_paragraph(f"Volume estimé : {data['volume_estime'] or 'À préciser'}")
+    doc.add_paragraph(f"Durée du traitement : {data['duree']}")
+    if data.get("donnees_sensibles"):
+        warn = doc.add_paragraph()
+        run = warn.add_run(
+            "ATTENTION : ce traitement inclut des données sensibles (Art. 9 "
+            "RGPD). Une AIPD est obligatoire."
         )
-        if result.returncode != 0:
-            raise RuntimeError(f"docx-js error: {result.stderr[:500]}")
-        if "ERR:" in result.stdout:
-            raise RuntimeError(result.stdout)
-        return str(output_path)
-    finally:
-        os.unlink(js_path)
+        run.bold = True
+        run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+
+    # Annexe 2 — mesures de sécurité
+    doc.add_heading("III. Annexe 2 — Mesures de sécurité (Art. 32 RGPD)", level=1)
+    doc.add_paragraph("Le sous-traitant met en œuvre les mesures techniques et organisationnelles suivantes :")
+    for item in (data["mesures_securite"] or ["Mesures standard de sécurité"]):
+        doc.add_paragraph(item, style="List Bullet")
+    if data.get("certifications"):
+        doc.add_heading("Certifications et conformités", level=2)
+        doc.add_paragraph(", ".join(data["certifications"]))
+
+    # Annexe 3 — sous-traitants ultérieurs
+    doc.add_heading("IV. Annexe 3 — Sous-traitants ultérieurs", level=1)
+    autorisation = (
+        "Spécifique (au cas par cas)" if data.get("autorisation_sst") == "specifique"
+        else "Générale (avec notification préalable)"
+    )
+    doc.add_paragraph(f"Autorisation : {autorisation}.")
+    for item in (data.get("liste_sst") or ["Aucun sous-traitant ultérieur prévu"]):
+        doc.add_paragraph(item, style="List Bullet")
+
+    # Annexe 4 — transferts hors UE
+    if data.get("transfert_hors_ue"):
+        doc.add_heading("V. Annexe 4 — Transferts hors UE", level=1)
+        doc.add_paragraph(f"Pays de traitement : {data.get('pays_traitement', '?')}")
+        doc.add_paragraph(f"Mécanisme de transfert : {data.get('mecanisme_transfert') or 'À définir'}")
+
+    # Signatures
+    doc.add_heading("Signatures", level=1)
+    doc.add_paragraph(
+        "Les parties soussignées déclarent avoir lu et approuvé l'intégralité "
+        "du présent Accord de Traitement des Données. Cet accord entre en "
+        "vigueur à la date de la dernière signature."
+    )
+    sig = doc.add_table(rows=1, cols=2)
+    sig.style = "Table Grid"
+    _cell_text(sig.cell(0, 0), "Responsable du traitement", bold=True)
+    _cell_extra_line(sig.cell(0, 0), data["rt_nom"])
+    _cell_extra_line(sig.cell(0, 0), f"Représenté par : {data['rt_representant'] or '___________________'}")
+    _cell_extra_line(sig.cell(0, 0), "Date et signature :")
+    _cell_extra_line(sig.cell(0, 0), "____________________________")
+    _cell_text(sig.cell(0, 1), "Sous-traitant", bold=True)
+    _cell_extra_line(sig.cell(0, 1), data["st_nom"])
+    _cell_extra_line(sig.cell(0, 1), f"Représenté par : {data['st_representant'] or '___________________'}")
+    _cell_extra_line(sig.cell(0, 1), "Date et signature :")
+    _cell_extra_line(sig.cell(0, 1), "____________________________")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(output_path)
+    return output_path
 
 
 # ================================================================
@@ -813,17 +593,17 @@ def run_demo():
     SEP = "=" * 62
 
     print(f"\n{SEP}")
-    print("  DEMO — Générateur de DPA (Art. 28 RGPD)")
+    print("  Démo — générateur de DPA (Art. 28 RGPD)")
     print(f"{SEP}\n")
     print(
-        "  Scénario : TechCorp SARL confie l'hébergement de son\n"
-        "  CRM à CloudHost Solutions. Sans DPA signé, tout\n"
-        "  incident de sécurité chez le sous-traitant engage\n"
-        "  la responsabilité de TechCorp vis-à-vis de la CNIL.\n"
+        "  Scénario : TechCorp SARL confie l'hébergement de son CRM à\n"
+        "  CloudHost Solutions. Sans DPA signé, tout incident de sécurité\n"
+        "  chez le sous-traitant engage la responsabilité de TechCorp\n"
+        "  vis-à-vis de la CNIL.\n"
     )
 
     print(f"  {'─'*60}")
-    print(f"  📋  ÉTAPE 1 : Construction du DPA")
+    print("  Étape 1 : construction du DPA")
     print(f"  {'─'*60}\n")
 
     data = build_dpa_data(DEMO_CONFIG)
@@ -836,7 +616,7 @@ def run_demo():
     print(f"  Transfert UE  : {'Non — mécanisme : ' + data['mecanisme_transfert'] if data['transfert_hors_ue'] else 'Oui (hébergement France)'}")
 
     print(f"\n  {'─'*60}")
-    print(f"  ✅  ÉTAPE 2 : Vérification de conformité")
+    print("  Étape 2 : vérification de conformité")
     print(f"  {'─'*60}\n")
 
     conformite = verifier_conformite_dpa(data)
@@ -844,52 +624,53 @@ def run_demo():
     print(f"  Score Art. 28 : [{bar}] {conformite['pct']}%  "
           f"({conformite['score']}/{conformite['total']} checks)")
     for check, ok in conformite["checks"].items():
-        icon = "✅" if ok else "❌"
-        print(f"    {icon}  {check.replace('_', ' ')}")
+        marker = "OK" if ok else "--"
+        print(f"    [{marker}]  {check.replace('_', ' ')}")
 
     print(f"\n  {'─'*60}")
-    print(f"  📄  ÉTAPE 3 : Génération du document Word")
+    print("  Étape 3 : génération du document Word")
     print(f"  {'─'*60}\n")
 
-    output_path = Path("/mnt/user-data/outputs/DPA_TechCorp_CloudHost.docx")
-    print(f"  Génération en cours...")
+    output_path = Path("./output/DPA_TechCorp_CloudHost.docx")
 
     try:
         generate_docx(data, output_path)
         size_kb = output_path.stat().st_size // 1024
-        print(f"  ✅  Document généré : {output_path.name}")
+        print(f"  Document généré : {output_path}")
         print(f"  Taille  : {size_kb} Ko")
-        print(f"  Contenu : Page de garde · {len(data['clauses'])} clauses "
-              f"· 4 annexes · Bloc signatures")
+        print(f"  Contenu : page de garde · {len(data['clauses'])} clauses "
+              f"· 4 annexes · bloc signatures")
     except Exception as e:
-        print(f"  ❌  Erreur génération DOCX : {e}")
+        print(f"  Erreur génération DOCX : {e}")
 
     print(f"\n{SEP}")
-    print(f"  📋  RÉSUMÉ DES 12 CLAUSES GÉNÉRÉES")
+    print("  Résumé des clauses générées")
     print(f"{SEP}")
     for i, (key, clause) in enumerate(data["clauses"].items(), 1):
         print(f"  {i:>2}. [{clause['article']:<25}] {clause['titre']}")
 
     print(f"\n{SEP}")
-    print(f"  ⚖️   CONTEXTE LÉGAL")
+    print("  Contexte légal")
     print(f"{SEP}\n")
     print(
         "  Sans DPA conforme Art. 28 :\n"
-        "  ❌  Responsabilité solidaire RT + ST en cas de fuite\n"
-        "  ❌  Amende CNIL : jusqu'à 10M€ ou 2% CA (Art. 83 §4)\n"
-        "  ❌  Absence de recours contractuel contre le ST\n"
-        "  ❌  Impossibilité de notifier la CNIL dans les 72h\n"
+        "  - responsabilité solidaire RT + ST en cas de fuite\n"
+        "  - amende CNIL : jusqu'à 10M€ ou 2% CA (Art. 83 §4)\n"
+        "  - absence de recours contractuel contre le ST\n"
+        "  - impossibilité de notifier la CNIL dans les 72h\n"
         "\n"
         "  Avec ce DPA :\n"
-        "  ✅  Obligations contractuellement opposables au ST\n"
-        "  ✅  Droit d'audit formalisé\n"
-        "  ✅  Procédure de notification violation définie\n"
-        "  ✅  Sort des données en fin de contrat garanti\n"
-        "  ✅  Preuve de conformité pour la CNIL\n"
+        "  - obligations contractuellement opposables au ST\n"
+        "  - droit d'audit formalisé\n"
+        "  - procédure de notification violation définie\n"
+        "  - sort des données en fin de contrat garanti\n"
+        "  - preuve de conformité pour la CNIL\n"
     )
-    print(f"  Usage :\n"
-          f"  python3 dpa_generator.py generate --rt 'MaBoite' --st 'MonCloud'\n"
-          f"  python3 dpa_generator.py demo\n")
+    print(
+        "  Usage :\n"
+        "  python3 dpa_generator.py generate --rt 'MaBoite' --st 'MonCloud'\n"
+        "  python3 dpa_generator.py demo\n"
+    )
 
 
 # ================================================================
@@ -897,9 +678,8 @@ def run_demo():
 # ================================================================
 
 def main():
-    print(__doc__)
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Générateur de DPA (Art. 28 RGPD), .docx natif.")
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")
 
@@ -926,7 +706,7 @@ def main():
         data = build_dpa_data(config)
         out  = Path(args.output)
         generate_docx(data, out)
-        print(f"\n  ✅  DPA généré : {out}")
+        print(f"\n  DPA généré : {out}")
         print(f"  Référence : {data['ref']}")
 
 
