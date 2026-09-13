@@ -1,43 +1,23 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 15 : AUDIT DE DÉPENDANCES        ║
-║  Objectif : Détecter les CVE dans package.json / requirements    ║
-║  Sources  : OSV.dev · PyPI Advisory · GitHub Advisory DB        ║
-║  Action   : Bloquer le déploiement si CVE critique détectée      ║
-╚══════════════════════════════════════════════════════════════════╝
+Scanner de CVE pour manifestes de dépendances Python et Node.js, avec un
+code de sortie exploitable pour bloquer un pipeline CI/CD.
 
-Problème concret :
-  Log4Shell (CVE-2021-44228) — CVSS 10.0, critique maximum.
-  Des milliers d'entreprises ont été compromises parce que
-  personne ne savait que leur app Java embarquait log4j vulnérable
-  dans une dépendance de dépendance, trois niveaux de profondeur.
-
-  Ce script analyse les manifestes de dépendances et bloque
-  le pipeline CI/CD si une CVE avec CVSS ≥ seuil est détectée.
-
-Sources de vulnérabilités utilisées :
-  • OSV.dev (Google) — base unifiée, gratuite, aucune clé API
-  • PyPI Advisory Database — vulnérabilités Python
-  • npm audit — vulnérabilités Node.js (si npm disponible)
-  • Base locale simulée — pour la démo hors-ligne
-
-Seuils de blocage configurables :
-  CRITICAL (CVSS ≥ 9.0) → Blocage déploiement immédiat
-  HIGH     (CVSS ≥ 7.0) → Alerte + PR bloquée
-  MEDIUM   (CVSS ≥ 4.0) → Warning dans les logs
-  LOW      (CVSS < 4.0)  → Info seulement
-
-Conformité :
-  ISO 27001 A.12.6.1 — Gestion des vulnérabilités techniques
-  OWASP Top 10 A06:2021 — Vulnerable and Outdated Components
-  ANSSI — Guide développement sécurisé (recommandation 6.4)
-  PCI-DSS 6.3.3 — Mise à jour des composants logiciels
-
-Intégration CI/CD :
-  Exit code 0 → Déploiement autorisé
-  Exit code 1 → Déploiement BLOQUÉ (CVE critique)
-  Exit code 2 → Warning (CVE haute)
+Log4Shell (CVE-2021-44228, CVSS 10.0) s'est retrouvé en production chez
+des milliers d'entreprises parce que personne ne suivait le fait que leur
+build tirait log4j de façon transitive, trois niveaux de dépendances
+sous tout ce qu'un humain avait réellement choisi. Relire un
+requirements.txt ou un package.json à l'œil ne détecte pas ça ;
+interroger une base de vulnérabilités pour chaque paquet résolu, si.
+Ce script parse requirements.txt, Pipfile et package.json, vérifie
+chaque couple (paquet, version) contre OSV.dev plus une petite table
+locale de CVE bien connues (conservée pour que la démo et les
+exécutions hors ligne produisent quand même un résultat sans accès
+réseau), et fait correspondre le score CVSS le plus élevé trouvé à un
+code de sortie CI : 0 propre, 1 une CRITIQUE existe (bloquer), 2 la pire
+est HIGH. Les résultats OSV.dev sont mis en cache SQLite 24h, car
+réinterroger chaque paquet à chaque commit finit par coûter cher dans un
+pipeline CI qui tourne à chaque push.
 """
 
 import os
@@ -682,7 +662,7 @@ def run_demo():
 
         # ── Audit Python ──
         print(f"  {'─'*60}")
-        print(f"  🐍  AUDIT PYTHON (requirements.txt)")
+        print(f"  AUDIT PYTHON (requirements.txt)")
         print(f"  {'─'*60}\n")
 
         py_result = auditor.audit_manifest(
@@ -697,7 +677,7 @@ def run_demo():
 
         # ── Audit Node ──
         print(f"\n  {'─'*60}")
-        print(f"  📦  AUDIT NODE.JS (package.json)")
+        print(f"  AUDIT NODE.JS (package.json)")
         print(f"  {'─'*60}\n")
 
         js_result = auditor.audit_manifest(
@@ -712,7 +692,7 @@ def run_demo():
 
         # ── Synthèse ──
         print(f"\n  {'─'*60}")
-        print(f"  📊  SYNTHÈSE GLOBALE")
+        print(f"  SYNTHÈSE GLOBALE")
         print(f"  {'─'*60}\n")
 
         all_findings = py_result["findings"] + js_result["findings"]
@@ -725,21 +705,21 @@ def run_demo():
         bar_h = "█" * len(high)     * 3
         bar_m = "█" * len(medium)   * 3
 
-        print(f"  🔴 CRITIQUE  : {len(critical):>2}  {bar_c}")
-        print(f"  🟠 HAUTE     : {len(high):>2}  {bar_h}")
-        print(f"  🟡 MOYENNE   : {len(medium):>2}  {bar_m}")
+        print(f"  CRITIQUE  : {len(critical):>2}  {bar_c}")
+        print(f"  HAUTE     : {len(high):>2}  {bar_h}")
+        print(f"  MOYENNE   : {len(medium):>2}  {bar_m}")
         print(f"  ─────────────────────────")
-        print(f"     Total     : {total:>2}  CVE détectées\n")
+        print(f"  Total     : {total:>2}  CVE détectées\n")
 
         # SBOM
         sbom = auditor.generate_sbom(tmpdir)
-        print(f"  📋 SBOM généré : {sbom['component_count']} composants inventoriés")
-        print(f"     Format     : {sbom['spec']}")
-        print(f"     Date       : {sbom['generated_at'][:19]}\n")
+        print(f"  SBOM généré : {sbom['component_count']} composants inventoriés")
+        print(f"  Format      : {sbom['spec']}")
+        print(f"  Date        : {sbom['generated_at'][:19]}\n")
 
         # ── Décision CI/CD ──
         print(f"  {'─'*60}")
-        print(f"  🚦  DÉCISION CI/CD")
+        print(f"  DÉCISION CI/CD")
         print(f"  {'─'*60}\n")
 
         combined = {
@@ -751,28 +731,27 @@ def run_demo():
         exit_code = auditor.get_exit_code(combined)
 
         if exit_code == 1:
-            print(f"  ❌  DÉPLOIEMENT BLOQUÉ — Exit code 1")
+            print(f"  DÉPLOIEMENT BLOQUÉ — Exit code 1")
             print(f"  {len(critical)} CVE critique(s) détectée(s)")
-            print(f"\n  Mises à jour URGENTES requises :")
+            print(f"\n  Mises à jour urgentes requises :")
             for f in critical:
-                print(f"    • {f['package']} → {f.get('fixed_version','version suivante')}")
+                print(f"    - {f['package']} -> {f.get('fixed_version','version suivante')}")
         elif exit_code == 2:
-            print(f"  ⚠️   DÉPLOIEMENT EN ATTENTE — Exit code 2")
+            print(f"  DÉPLOIEMENT EN ATTENTE — Exit code 2")
             print(f"  {len(high)} CVE haute(s) — approbation manuelle requise")
         else:
-            print(f"  ✅  DÉPLOIEMENT AUTORISÉ — Exit code 0")
+            print(f"  DÉPLOIEMENT AUTORISÉ — Exit code 0")
 
         # ── Plan de remédiation ──
         print(f"\n  {'─'*60}")
-        print(f"  🛠️   PLAN DE REMÉDIATION PRIORISÉ")
+        print(f"  PLAN DE REMÉDIATION PRIORISÉ")
         print(f"  {'─'*60}\n")
 
         for f in sorted(all_findings,
                          key=lambda x: -x.get("cvss", 0)):
             if f["severity"] not in ("CRITICAL", "HIGH"):
                 continue
-            icon = "🔴" if f["severity"] == "CRITICAL" else "🟠"
-            print(f"  {icon} {f['package']:<18} {f['id']}")
+            print(f"  {f['package']:<18} {f['id']}")
             print(f"     Version actuelle : {f['version'] or '?'}")
             print(f"     Version corrigée : {f.get('fixed_version','?')}")
             if f["ecosystem"] == "PyPI":
@@ -784,7 +763,7 @@ def run_demo():
 
         # ── Conformité ──
         print(f"\n{SEP}")
-        print(f"  ⚖️   CONFORMITÉ ISO 27001 A.12.6.1")
+        print(f"  CONFORMITÉ ISO 27001 A.12.6.1")
         print(f"{SEP}\n")
         print(
             "  Exigence : 'Les informations sur les vulnérabilités\n"
@@ -793,11 +772,11 @@ def run_demo():
             "  évalués et les mesures appropriées doivent être prises.'\n"
             "\n"
             "  Ce script implémente :\n"
-            "  ✅  Inventaire automatique (SBOM)\n"
-            "  ✅  Détection CVE multi-sources (OSV.dev + base locale)\n"
-            "  ✅  Scoring CVSS et seuils de blocage configurables\n"
-            "  ✅  Intégration CI/CD (exit code pour GitHub Actions)\n"
-            "  ✅  Plan de remédiation avec commandes exactes\n"
+            "  - Inventaire automatique (SBOM)\n"
+            "  - Détection CVE multi-sources (OSV.dev + base locale)\n"
+            "  - Scoring CVSS et seuils de blocage configurables\n"
+            "  - Intégration CI/CD (exit code pour GitHub Actions)\n"
+            "  - Plan de remédiation avec commandes exactes\n"
             "\n"
             "  Intégration GitHub Actions (.github/workflows/security.yml) :\n"
             "  - name: Audit dépendances\n"
@@ -812,17 +791,14 @@ def run_demo():
 def _print_findings(findings: list):
     """Affiche les CVE trouvées de façon lisible."""
     if not findings:
-        print(f"  ✅  Aucune CVE connue détectée\n")
+        print(f"  Aucune CVE connue détectée\n")
         return
 
     sorted_f = sorted(findings, key=lambda x: -x.get("cvss", 0))
     for f in sorted_f:
-        lvl  = f["severity"]
-        icon = {"CRITICAL": "🔴", "HIGH": "🟠",
-                "MEDIUM": "🟡", "LOW": "🔵"}.get(lvl, "⚪")
         cvss_str = f"CVSS {f.get('cvss', '?')}"
         print(
-            f"  {icon} {f['package']:<18} v{f['version'] or '?':<12} "
+            f"  [{f['severity']}] {f['package']:<18} v{f['version'] or '?':<12} "
             f"{f['id']:<22} {cvss_str}"
         )
         print(f"     {f['summary'][:68]}")
@@ -883,7 +859,7 @@ def main():
             elif target.name == "Pipfile":
                 parser_fn = parse_pipfile
             else:
-                print(f"  ❌  Format non reconnu : {target.name}")
+                print(f"  Format non reconnu : {target.name}")
                 sys.exit(1)
 
             r = auditor.audit_manifest(str(target), parser_fn)
@@ -897,19 +873,19 @@ def main():
                 "total_findings":  len(r["findings"]),
             }
         else:
-            print(f"  ❌  Cible introuvable : {target}")
+            print(f"  Cible introuvable : {target}")
             sys.exit(1)
 
         # Affichage
         print(f"\n  Résultats pour : {args.target}")
         print(f"  Manifestes     : {results['manifests_found']}")
-        print(f"  🔴 Critiques   : {results['total_critical']}")
-        print(f"  🟠 Hautes      : {results['total_high']}")
-        print(f"  🟡 Moyennes    : {results['total_medium']}\n")
+        print(f"  Critiques      : {results['total_critical']}")
+        print(f"  Hautes         : {results['total_high']}")
+        print(f"  Moyennes       : {results['total_medium']}\n")
 
         for r in results["results"]:
             if r["findings"]:
-                print(f"  📄 {r['manifest']}")
+                print(f"  {r['manifest']}")
                 _print_findings(r["findings"])
 
         # SBOM
@@ -921,22 +897,22 @@ def main():
             Path(sbom_path).write_text(
                 json.dumps(sbom, indent=2, ensure_ascii=False)
             )
-            print(f"  ✅  SBOM : {sbom_path} ({sbom['component_count']} composants)")
+            print(f"  SBOM : {sbom_path} ({sbom['component_count']} composants)")
 
         # Sortie JSON
         if args.output and not args.sbom:
             Path(args.output).write_text(
                 json.dumps(results, indent=2, ensure_ascii=False)
             )
-            print(f"  ✅  Rapport JSON : {args.output}")
+            print(f"  Rapport JSON : {args.output}")
 
         exit_code = auditor.get_exit_code(results, args.block_on)
         if exit_code == 1:
-            print(f"\n  ❌  DÉPLOIEMENT BLOQUÉ (exit {exit_code})")
+            print(f"\n  DÉPLOIEMENT BLOQUÉ (exit {exit_code})")
         elif exit_code == 2:
-            print(f"\n  ⚠️   WARNING HAUTE SÉVÉRITÉ (exit {exit_code})")
+            print(f"\n  WARNING HAUTE SÉVÉRITÉ (exit {exit_code})")
         else:
-            print(f"\n  ✅  OK (exit {exit_code})")
+            print(f"\n  OK (exit {exit_code})")
 
         sys.exit(exit_code)
 

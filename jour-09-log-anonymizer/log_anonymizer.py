@@ -1,38 +1,32 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 9 : L'ANONYMISEUR DE LOGS        ║
-║  Technique : Pseudonymisation cohérente (RGPD Art. 4 §5)        ║
-║  Patterns  : Email · IP · Nom · Téléphone · IBAN · CB · INSEE   ║
-║  Modes     : Anonymisation · Pseudonymisation · Dé-pseudo        ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Pseudonymiser les données personnelles dans des fichiers de logs avant qu'ils ne sortent du périmètre.
 
-Exigence légale : Art. 25 RGPD — "Protection des données dès la
-conception" (Privacy by Design). Les logs serveurs contiennent
-des données personnelles : les stocker en clair sans nécessité
-constitue une violation.
+Les logs d'accès, traces d'erreur et sorties de debug récupèrent des
+emails, adresses IP, numéros de téléphone, numéros de carte et même des
+identifiants en clair de façon incidente — personne ne décide de logger
+des données personnelles, elles suivent le mouvement de tout ce qui
+s'imprime. Ce module en détecte 11 catégories par regex (email,
+IPv4/IPv6, téléphones français, IBAN, numéros de carte, NIR, affectations
+mot de passe/token, noms complets, dates de naissance, UUID) et remplace
+chaque occurrence par un jeton.
 
-Art. 5(1)(e) — Limitation de la conservation : les données ne
-doivent pas être conservées plus longtemps que nécessaire.
-Un log de debug contenant des données personnelles réelles
-expose l'entreprise même si la donnée n'est "que" dans un log.
+Les jetons sont générés par HMAC-SHA256 avec une clé secrète, pas par un
+simple hachage. Un simple hachage d'un email ou d'une plage IP /24 est
+réversible par force brute — l'espace d'entrée est assez petit pour être
+énuméré et comparé — donc quiconque récupère le log peut simplement
+hacher une liste d'emails qui a fuité ailleurs et faire correspondre les
+entrées. Un HMAC avec une clé secrète non publiée rend cette attaque
+inutile. La même entrée produit toujours le même jeton sous une clé
+donnée, ce qui est la propriété qui garde la sortie exploitable pour le
+débogage : on peut voir que cinq lignes de log concernent le même
+utilisateur sans jamais apprendre qui il est, sauf à détenir la clé.
 
-Distinction essentielle (Art. 4 §5 RGPD) :
-  Anonymisation  : irréversible — l'original est PERDU
-    -> Hors champ du RGPD, mais perd la traçabilité debug
-  Pseudonymisation : réversible via une clé secrète
-    -> Sous RGPD, mais permet le debug autorisé
-
-Notre implémentation :
-  1. Table de correspondance chiffrée (clé secrète requise)
-  2. Pseudonymes cohérents : même valeur -> même pseudonyme
-     (indispensable pour corréler les événements dans les logs)
-  3. 12 patterns détectés automatiquement via regex
-  4. Mode "reveal" pour les investigations autorisées
-
-Risque évité : Amende CNIL pour conservation de données
-personnelles dans des logs non protégés. Cas réels : 3M euros
-(Google, 2019), 150M euros (Google, 2022) pour non-conformité.
+Ça correspond à une distinction réelle de l'Art. 4(5) RGPD :
+l'anonymisation est irréversible et sort la donnée du champ d'application
+du règlement, alors que la pseudonymisation reste dans le champ mais
+garde assez de structure pour des usages légitimes comme le débogage ou
+la corrélation de fraude — exactement ce dont a besoin une équipe support
+ou ops face à un lot de logs de production.
 """
 
 import re
@@ -117,7 +111,6 @@ PSEUDO_PREFIX = {
     "UUID":           "uid",
 }
 
-SEV_ICON = {"CRITIQUE": "🔴", "ELEVE": "🟠", "MODERE": "🟡", "FAIBLE": "🔵"}
 
 
 # ================================================================
@@ -311,7 +304,7 @@ class LogAnonymizer:
 
         log_files = [f for f in folder.rglob("*")
                      if f.is_file() and f.suffix in extensions]
-        print(f"  📂  {len(log_files)} fichier(s) à anonymiser...")
+        print(f"  {len(log_files)} fichier(s) à anonymiser...")
 
         for log_file in log_files:
             rel = log_file.relative_to(folder)
@@ -319,7 +312,7 @@ class LogAnonymizer:
             r   = self.process_file(log_file, out, mode)
             results.append(r)
             pct = (r["lines_modified"] / max(r["lines_total"], 1)) * 100
-            print(f"  ✅  {log_file.name:<35} "
+            print(f"  {log_file.name:<35} "
                   f"{r['lines_modified']}/{r['lines_total']} lignes ({pct:.0f}%)")
 
         return {"files": len(results), "results": results}
@@ -410,34 +403,33 @@ def run_demo():
         )
 
         # --- Etape 1 : Analyse ---
-        print(f"  {'─'*60}")
-        print(f"  🔍  ETAPE 1 : DETECTION des donnees personnelles")
-        print(f"  {'─'*60}\n")
+        print(f"  {'-'*60}")
+        print(f"  ETAPE 1 : DETECTION des donnees personnelles")
+        print(f"  {'-'*60}\n")
 
         all_counts = defaultdict(int)
         for fname, content in SAMPLE_LOGS.items():
             findings = anon.analyze_only(content)
             if findings:
-                print(f"  📄  {fname} :")
+                print(f"  {fname} :")
                 for dtype, matches in sorted(findings.items()):
-                    sev  = matches[0]["severity"]
-                    icon = SEV_ICON.get(sev, "⚪")
-                    ex   = ", ".join(f'"{m["value"][:30]}"' for m in matches[:2])
-                    print(f"    {icon} {dtype:<22} x{len(matches):<2} ex: {ex[:55]}")
+                    sev = matches[0]["severity"]
+                    ex  = ", ".join(f'"{m["value"][:30]}"' for m in matches[:2])
+                    print(f"    [{sev:<8}] {dtype:<22} x{len(matches):<2} ex: {ex[:55]}")
                     all_counts[dtype] += len(matches)
 
         total = sum(all_counts.values())
         print(f"\n  Total : {total} occurrences dans {len(SAMPLE_LOGS)} fichiers")
 
         # --- Etape 2 : Coherence de pseudonymisation ---
-        print(f"\n  {'─'*60}")
-        print(f"  🔒  ETAPE 2 : PSEUDONYMISATION COHERENTE")
-        print(f"  {'─'*60}\n")
+        print(f"\n  {'-'*60}")
+        print(f"  ETAPE 2 : PSEUDONYMISATION COHERENTE")
+        print(f"  {'-'*60}\n")
         print("  Propriete cle : meme valeur -> meme pseudonyme\n")
 
         examples = [
             ("alice.martin@techcorp.fr", "EMAIL",          ""),
-            ("alice.martin@techcorp.fr", "EMAIL",          "<-- identique ✅"),
+            ("alice.martin@techcorp.fr", "EMAIL",          "<-- identique"),
             ("bob.dupont@gmail.com",     "EMAIL",          ""),
             ("192.168.1.45",             "IPV4",           ""),
             ("203.0.113.42",             "IPV4",           ""),
@@ -447,41 +439,41 @@ def run_demo():
         ]
 
         print(f"  {'Original':<45} {'Pseudonyme':<30} Note")
-        print(f"  {'─'*45} {'─'*30} {'─'*16}")
+        print(f"  {'-'*45} {'-'*30} {'-'*16}")
         for original, dtype, note in examples:
             pseudo = anon.table.pseudonymize(original, dtype)
             print(f"  {original:<45} {pseudo:<30} {note}")
 
         # --- Etape 3 : Traitement des fichiers ---
-        print(f"\n  {'─'*60}")
-        print(f"  📁  ETAPE 3 : TRAITEMENT DES FICHIERS")
-        print(f"  {'─'*60}\n")
+        print(f"\n  {'-'*60}")
+        print(f"  ETAPE 3 : TRAITEMENT DES FICHIERS")
+        print(f"  {'-'*60}\n")
 
         anon.process_folder(input_dir, out_dir, mode="pseudonymize")
 
         # --- Etape 4 : Avant / Apres ---
-        print(f"\n  {'─'*60}")
-        print(f"  👁️   ETAPE 4 : AVANT / APRES")
-        print(f"  {'─'*60}")
+        print(f"\n  {'-'*60}")
+        print(f"  ETAPE 4 : AVANT / APRES")
+        print(f"  {'-'*60}")
 
         for fname in ["app_errors.log", "nginx_access.log"]:
             orig_lines  = (input_dir / fname).read_text().splitlines()
             anon_lines  = (out_dir   / fname).read_text().splitlines()
             shown = 0
-            print(f"\n  📄  {fname} :")
+            print(f"\n  {fname} :")
             for i, (o, a) in enumerate(zip(orig_lines, anon_lines)):
                 if o != a:
                     print(f"\n  Ligne {i+1} :")
-                    print(f"  ❌ AVANT  : {o[:105]}")
-                    print(f"  ✅ APRES  : {a[:105]}")
+                    print(f"  AVANT  : {o[:105]}")
+                    print(f"  APRES  : {a[:105]}")
                     shown += 1
                     if shown >= 2:
                         break
 
         # --- Etape 5 : Comparaison des modes ---
-        print(f"\n  {'─'*60}")
-        print(f"  🔄  ETAPE 5 : COMPARAISON DES 3 MODES")
-        print(f"  {'─'*60}\n")
+        print(f"\n  {'-'*60}")
+        print(f"  ETAPE 5 : COMPARAISON DES 3 MODES")
+        print(f"  {'-'*60}\n")
 
         test_line = (
             "2024-02-26 ERROR user jean.paul@company.fr from 192.168.1.42 "
@@ -500,26 +492,20 @@ def run_demo():
             print(f"  {result_line}\n")
 
         # --- Stats ---
-        print(f"  {'─'*60}")
-        print(f"  📊  STATISTIQUES DE LA TABLE")
-        print(f"  {'─'*60}\n")
+        print(f"  {'-'*60}")
+        print(f"  STATISTIQUES DE LA TABLE")
+        print(f"  {'-'*60}\n")
 
         stats = anon.table.get_stats()
         print(f"  Entrees dans la table : {stats['total_mappings']}")
         print(f"  Par type :")
-        type_icons = {
-            "EMAIL": "📧", "IPV4": "🌐", "CARTE_BANCAIRE": "💳",
-            "IBAN": "🏦", "TELEPHONE_FR": "📱", "MOT_DE_PASSE": "🔑",
-            "NOM_PRENOM": "👤", "UUID": "🔣", "DATE_NAISSANCE": "📅",
-        }
         for dtype, count in sorted(stats["by_type"].items(), key=lambda x: -x[1]):
-            bar  = "█" * min(count, 20)
-            icon = type_icons.get(dtype, "•")
-            print(f"    {icon} {dtype:<22} {bar} ({count})")
+            bar = "#" * min(count, 20)
+            print(f"    {dtype:<22} {bar} ({count})")
 
         # --- Bilan RGPD ---
         print(f"\n{'='*62}")
-        print(f"  📋  BILAN RGPD & CONFORMITE")
+        print(f"  BILAN RGPD & CONFORMITE")
         print(f"{'='*62}\n")
         print(
             "  Pseudonymes generes :\n"
@@ -531,10 +517,9 @@ def run_demo():
             "  Noms      --> [person_c4d5e6f7]\n"
             "\n"
             "  Proprietes garanties :\n"
-            "  ✅  Coherence    : meme valeur = meme pseudonyme\n"
-            "  ✅  HMAC-SHA256  : inderivable sans la cle secrete\n"
-            "  ✅  Audit trail  : chaque de-pseudo est journalise\n"
-            "  ✅  Minimisation : seuls les champs sensibles sont remplaces\n"
+            "  Coherence    : meme valeur = meme pseudonyme\n"
+            "  HMAC-SHA256  : inderivable sans la cle secrete\n"
+            "  Minimisation : seuls les champs sensibles sont remplaces\n"
             "\n"
             "  Articles RGPD respectes :\n"
             "  Art. 4 P5 : Pseudonymisation conforme\n"
@@ -592,7 +577,7 @@ def main():
         src = Path(args.input)
         dst = Path(args.output) if args.output else src.with_suffix(".anon" + src.suffix)
         r   = anon.process_file(src, dst, mode=args.mode)
-        print(f"\n  ✅  {r['lines_modified']}/{r['lines_total']} lignes traitees -> {r['output']}")
+        print(f"\n  {r['lines_modified']}/{r['lines_total']} lignes traitees -> {r['output']}")
         for k, v in sorted(r["replacements"].items(), key=lambda x: -x[1]):
             print(f"    {k}: {v}")
 
@@ -605,9 +590,8 @@ def main():
         total    = sum(len(v) for v in findings.values())
         print(f"\n  {total} occurrence(s) dans {args.input}\n")
         for dtype, matches in sorted(findings.items()):
-            sev  = matches[0]["severity"]
-            icon = SEV_ICON.get(sev, "⚪")
-            print(f"  {icon} {dtype} ({len(matches)}):")
+            sev = matches[0]["severity"]
+            print(f"  [{sev}] {dtype} ({len(matches)}):")
             for m in matches[:3]:
                 print(f"    pos {m['position']}: {m['value']}")
 

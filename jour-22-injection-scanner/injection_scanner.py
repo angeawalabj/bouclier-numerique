@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 22 : SCANNER INJECTIONS        ║
-║  Objectif  : Détecter SQLi, XSS, SSTI, Command Injection      ║
-║  Technique : Payloads adaptatifs · Détection de réflexion      ║
-║  Légalité  : Usage sur VOS propres applications UNIQUEMENT     ║
-╚══════════════════════════════════════════════════════════════════╝
+Scanner d'injections web : SQLi, XSS réfléchi, SSTI et command injection.
 
-Différence avec le fuzzer d'API (Jour 21) :
-  - Jour 21 : protocole API (OWASP API Top 10, endpoints REST)
-  - Jour 22 : injections dans les paramètres (OWASP Web Top 10)
-              → crawl des formulaires HTML, spider des paramètres GET/POST
-              → détection fine SQLi (basée sur erreurs + time-based)
-              → XSS réfléchi et stocké, SSTI, Command Injection
+Contrairement au fuzzer d'API (Jour 21), qui teste le contrat REST
+(auth, rate limiting, exposition d'objets), celui-ci s'intéresse à la
+donnée qui traverse les paramètres GET/POST une fois qu'elle atteint le
+code applicatif : crawl des formulaires HTML, injection systématique de
+payloads dans chaque champ trouvé, puis analyse de la réponse.
 
-Techniques de détection :
-  SQLi Error-based  : mots-clés d'erreur DB dans la réponse
-  SQLi Time-based   : SLEEP(3)/pg_sleep(3)/WAITFOR DELAY → latence
-  XSS Réfléchi      : marqueur unique retrouvé dans le DOM
-  XSS Stocké        : vérification post-soumission sur la page cible
-  SSTI              : {{7*7}} → "49" dans la réponse
-  CMDi              : ; id ; whoami → uid= dans la réponse
+Les techniques de détection sont volontairement hétérogènes parce
+qu'une seule méthode ne suffit pas : les erreurs SQL affichées trahissent
+une injection immédiatement, mais une application qui masque ses erreurs
+reste vulnérable — d'où le test time-based (SLEEP/pg_sleep/WAITFOR), qui
+mesure une latence anormale plutôt qu'un message d'erreur. Le XSS réfléchi
+utilise un marqueur aléatoire par requête pour éviter les faux positifs
+liés à du contenu déjà présent sur la page. Le SSTI et la command
+injection cherchent une évaluation effective du payload ({{7*7}} -> 49,
+uid=... pour `id`) plutôt qu'une simple réflexion, ce qui réduit
+nettement le bruit par rapport à une détection basée sur mots-clés.
 
-Conformité : OWASP Top 10 A03:2021 (Injection) · ISO 27001 A.14.2.8
+Référence : OWASP Top 10 A03:2021 (Injection), ISO 27001 A.14.2.8.
 """
 
 import urllib.request
@@ -268,8 +265,7 @@ class InjectionScanner:
         }
         with self._lock:
             self.findings.append(f)
-        sev_icons = {"CRITIQUE":"🔴","ÉLEVÉE":"🟠","MODÉRÉE":"🟡","FAIBLE":"🟢"}
-        print(f"    {sev_icons.get(severity,'⚪')} [{severity}] {title}")
+        print(f"    [{severity}] {title}")
 
     # ── Crawl ────────────────────────────────────────────────────
 
@@ -282,7 +278,7 @@ class InjectionScanner:
         queue   = [self.base_url]
         visited = set()
 
-        print(f"  🕷️  Crawl de {self.base_url}...")
+        print(f"  Crawl de {self.base_url}...")
 
         while queue and len(visited) < self.max_pages:
             url = queue.pop(0)
@@ -333,7 +329,7 @@ class InjectionScanner:
                 if link.startswith(self.base_url) and link not in visited:
                     queue.append(link)
 
-        print(f"  📄  {len(visited)} page(s) crawlée(s) · {len(targets)} cible(s) trouvée(s)\n")
+        print(f"  {len(visited)} page(s) crawlée(s) · {len(targets)} cible(s) trouvée(s)\n")
         return targets
 
     # ── SQLi Error-based ─────────────────────────────────────────
@@ -552,7 +548,7 @@ class InjectionScanner:
             targets = self.crawl()
 
         if not targets:
-            print("  ⚠️  Aucune cible trouvée — vérifier l'URL de base.\n")
+            print("  Aucune cible trouvée — vérifier l'URL de base.\n")
             return
 
         total = len(targets)
@@ -685,7 +681,7 @@ class InjectionScanner:
 
         if output_path:
             output_path.write_text(report, encoding="utf-8")
-            print(f"\n  📄  Rapport → {output_path}")
+            print(f"\n  Rapport → {output_path}")
         return report
 
 
@@ -794,12 +790,10 @@ def create_vulnerable_demo_app():
 
 def run_demo():
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 22 : SCANNER INJECTIONS        ║
-╚══════════════════════════════════════════════════════════════════╝
+Scanner d'injections — démonstration
 
-  ⚠️  RAPPEL LÉGAL : Utilisation sur VOS propres applications
-  uniquement. Voir Art. L323-1 Code pénal.
+Rappel légal : utilisation sur vos propres applications uniquement
+(Art. L323-1 Code pénal).
 """)
 
     demo_port = 7172
@@ -814,9 +808,9 @@ def run_demo():
         )
         t.start()
         time.sleep(1.0)
-        print(f"  🚀  Application vulnérable démarrée sur {demo_url}\n")
+        print(f"  Application vulnérable démarrée sur {demo_url}\n")
     else:
-        print("  ⚠️  Flask non installé — démo simplifiée\n")
+        print("  Flask non installé — démo simplifiée\n")
         demo_url = "http://httpbin.org"
 
     scanner = InjectionScanner(
@@ -827,7 +821,7 @@ def run_demo():
     )
 
     print("  ─────────────────────────────────────────────────────────")
-    print("  🔍  SCAN EN COURS")
+    print("  SCAN EN COURS")
     print("  ─────────────────────────────────────────────────────────\n")
 
     scanner.scan()
@@ -842,10 +836,10 @@ def run_demo():
     ))
 
     print(f"\n  ─────────────────────────────────────────────────────────")
-    print(f"  📊  BILAN : {len(scanner.findings)} vulnérabilité(s) · Score {score}/100")
-    print(f"  🔴 Critique : {counts['CRITIQUE']}  🟠 Élevée : {counts['ÉLEVÉE']}  "
-          f"🟡 Modérée : {counts['MODÉRÉE']}  🟢 Faible : {counts['FAIBLE']}")
-    print(f"  📡 Requêtes : {scanner._req_count}")
+    print(f"  BILAN : {len(scanner.findings)} vulnérabilité(s) · Score {score}/100")
+    print(f"  Critique : {counts['CRITIQUE']}  Élevée : {counts['ÉLEVÉE']}  "
+          f"Modérée : {counts['MODÉRÉE']}  Faible : {counts['FAIBLE']}")
+    print(f"  Requêtes : {scanner._req_count}")
 
     report_path = Path("/tmp/rapport_injections.html")
     scanner.generate_report(report_path)
@@ -855,10 +849,10 @@ def run_demo():
   Ce scan a trouvé des injections typiques dans une app
   de développement non sécurisée :
 
-  🔴  SQLi error-based  → erreur MySQL/SQLite exposée
-  🔴  SQLi time-based   → SLEEP() accepté en aveugle
-  🔴  XSS réfléchi      → payload retourné sans encodage
-  🔴  SSTI              → {{{{7*7}}}} → 49 dans la réponse
+  SQLi error-based  → erreur MySQL/SQLite exposée
+  SQLi time-based   → SLEEP() accepté en aveugle
+  XSS réfléchi      → payload retourné sans encodage
+  SSTI              → {{{{7*7}}}} → 49 dans la réponse
 
   Impact réel :
   - SQLi = accès à toute la base de données
@@ -914,7 +908,7 @@ def main():
 
     out = Path(args.output or "rapport_injections.html")
     scanner.generate_report(out)
-    print(f"\n  ✅  Scan terminé · {len(scanner.findings)} finding(s) · Rapport : {out}")
+    print(f"\n  Scan terminé · {len(scanner.findings)} finding(s) · Rapport : {out}")
 
 
 if __name__ == "__main__":

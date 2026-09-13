@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 23 : CRAQUEUR DE HACHAGES      ║
-║  Objectif  : Tester la résistance de vos hachages              ║
-║  Techniques: Dictionnaire · Bruteforce · Rainbow · Hybride     ║
-║  Légalité  : VOS hachages uniquement — audit interne           ║
-╚══════════════════════════════════════════════════════════════════╝
+Craqueur de hachages pour auditer la résistance réelle de mots de passe stockés.
 
-Pourquoi un défenseur a besoin de savoir craquer des hachages :
+L'idée n'est pas d'attaquer qui que ce soit mais de répondre à une question
+concrète côté défense : si cette base de données fuitait demain, combien de
+comptes seraient récupérables en quelques minutes avec un dictionnaire et
+quelques règles de mutation ? C'est aussi le seul moyen fiable de vérifier
+qu'un choix d'algorithme (MD5 vs bcrypt vs Argon2) protège vraiment quelque
+chose : sur CPU pur, MD5 encaisse des centaines de milliers de hachages par
+seconde alors que bcrypt en fait une poignée — la différence se voit
+directement dans le benchmark intégré.
 
-  1. Auditer une base de données compromise (savoir combien de mots
-     de passe sont récupérables AVANT que les attaquants le fassent)
-  2. Tester sa politique de mots de passe ("combien de comptes
-     auraient été compromis par une attaque dictionnaire en 10min ?")
-  3. Valider que l'algorithme de hachage choisi résiste aux attaques
-     (MD5/SHA1 en < 1s vs bcrypt/scrypt en > 1h)
+Le craquage reste volontairement limité au CPU (pas de GPU, pas de cluster) :
+suffisant pour illustrer le principe et estimer un ordre de grandeur, très
+loin de ce qu'un outil comme hashcat ferait sur du matériel dédié.
 
-Ce script est intentionnellement limité en puissance (pas de GPU,
-pas de cluster) pour rester purement éducatif et démontrer le
-principe. En production, les attaquants utilisent hashcat avec GPU.
+Algorithmes supportés : MD5, SHA1, SHA224, SHA256, SHA384, SHA512 (stdlib),
+plus bcrypt/scrypt/PBKDF2/Argon2 quand les paquets correspondants sont
+installés.
 
-Algorithmes supportés :
-  MD5, SHA1, SHA224, SHA256, SHA384, SHA512 (stdlib)
-  bcrypt, scrypt, PBKDF2, Argon2 (si installés)
-
-Conformité : OWASP ASVS 2.4 · ANSSI RGS · NIST SP 800-63B
+Référence : OWASP ASVS 2.4, ANSSI RGS, NIST SP 800-63B.
 """
 
 import hashlib
@@ -177,7 +172,7 @@ class HashCracker:
           - Ajout de préfixes : !, @, 1
         """
         if self.verbose:
-            print(f"  📖  Dictionnaire : {len(wordlist)} mots", end="", flush=True)
+            print(f"  Dictionnaire : {len(wordlist)} mots", end="", flush=True)
             if rules:
                 print(f" × règles (×8 ≈ {len(wordlist)*8:,} candidats)", flush=True)
             else:
@@ -208,14 +203,14 @@ class HashCracker:
                 if self._check(candidate, target_hash):
                     elapsed = time.monotonic() - t0
                     if self.verbose:
-                        print(f"\n  ✅  Trouvé en {elapsed:.2f}s "
+                        print(f"\n  Trouvé en {elapsed:.2f}s "
                               f"({self.stats['attempts']:,} tentatives) : "
                               f"\033[92m{candidate}\033[0m")
                     return candidate
 
         if self.verbose:
             elapsed = time.monotonic() - t0
-            print(f"  ❌  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
+            print(f"  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
         return None
 
     # ── Attaque par bruteforce ───────────────────────────────────
@@ -237,7 +232,7 @@ class HashCracker:
 
         if self.verbose:
             total = sum(len(charset)**l for l in range(min_len, max_len + 1))
-            print(f"  💪  Bruteforce : charset={len(charset)} chars · "
+            print(f"  Bruteforce : charset={len(charset)} chars · "
                   f"longueur {min_len}–{max_len} · ~{total:,} combinaisons")
 
         t0 = time.monotonic()
@@ -247,19 +242,19 @@ class HashCracker:
                 if self._check(candidate, target_hash):
                     elapsed = time.monotonic() - t0
                     if self.verbose:
-                        print(f"\n  ✅  Trouvé [{length} chars] en {elapsed:.2f}s "
+                        print(f"\n  Trouvé [{length} chars] en {elapsed:.2f}s "
                               f"({self.stats['attempts']:,} tentatives) : "
                               f"\033[92m{candidate}\033[0m")
                     return candidate
                 # Affichage progression toutes les 100k tentatives
                 if self.verbose and self.stats["attempts"] % 500_000 == 0:
                     speed = self.stats["attempts"] / max(0.001, time.monotonic() - t0)
-                    print(f"\r  ⏳  {self.stats['attempts']:,} tentatives "
+                    print(f"\r  {self.stats['attempts']:,} tentatives "
                           f"({speed/1000:.0f}k/s) — dernier: {candidate}  ", end="", flush=True)
 
         if self.verbose:
             elapsed = time.monotonic() - t0
-            print(f"\n  ❌  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
+            print(f"\n  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
         return None
 
     # ── Attaque hybride ──────────────────────────────────────────
@@ -273,7 +268,7 @@ class HashCracker:
         """
         if self.verbose:
             total = len(wordlist) * (10 ** append_digits)
-            print(f"  🔀  Hybride : {len(wordlist)} mots × 10^{append_digits} = {total:,} candidats")
+            print(f"  Hybride : {len(wordlist)} mots × 10^{append_digits} = {total:,} candidats")
 
         t0 = time.monotonic()
         fmt = f"{{:0{append_digits}d}}"
@@ -283,13 +278,13 @@ class HashCracker:
                 if self._check(candidate, target_hash):
                     elapsed = time.monotonic() - t0
                     if self.verbose:
-                        print(f"\n  ✅  Trouvé (hybride) en {elapsed:.2f}s : "
+                        print(f"\n  Trouvé (hybride) en {elapsed:.2f}s : "
                               f"\033[92m{candidate}\033[0m")
                     return candidate
 
         if self.verbose:
             elapsed = time.monotonic() - t0
-            print(f"\n  ❌  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
+            print(f"\n  Non trouvé ({self.stats['attempts']:,} tentatives en {elapsed:.1f}s)")
         return None
 
 
@@ -333,7 +328,7 @@ class PasswordAuditor:
         wordlist = wordlist or self.BUILTIN_WORDLIST
         total    = len(hashes)
 
-        print(f"\n  🔍  Audit de {total} hachage(s) "
+        print(f"\n  Audit de {total} hachage(s) "
               f"(algorithme: {self.algorithm.upper()})\n")
 
         cracked     = 0
@@ -376,7 +371,7 @@ class PasswordAuditor:
                     "cracked": True,
                     "weak": is_weak,
                 })
-                strength = "💀 FAIBLE" if is_weak else "⚠️  MOYEN"
+                strength = "FAIBLE" if is_weak else "MOYEN"
                 print(f"  [{i:02d}/{total}] {user:<20} {strength}  → \033[91m{found}\033[0m  ({method}, {elapsed:.2f}s)")
             else:
                 findings.append({
@@ -388,7 +383,7 @@ class PasswordAuditor:
                     "cracked": False,
                     "weak": False,
                 })
-                print(f"  [{i:02d}/{total}] {user:<20} ✅ Résistant   (non craqué en {elapsed:.2f}s)")
+                print(f"  [{i:02d}/{total}] {user:<20} Résistant   (non craqué en {elapsed:.2f}s)")
 
         rate = cracked / total * 100 if total else 0
         report = {
@@ -510,7 +505,7 @@ class PasswordAuditor:
 
         if output_path:
             output_path.write_text(report, encoding="utf-8")
-            print(f"\n  📄  Rapport → {output_path}")
+            print(f"\n  Rapport → {output_path}")
         return report
 
 
@@ -582,17 +577,13 @@ def benchmark_algorithms(password: str = "test123") -> dict:
 # ════════════════════════════════════════════════════════════════
 
 def run_demo():
-    print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 23 : CRAQUEUR ÉTHIQUE          ║
-╚══════════════════════════════════════════════════════════════════╝
-""")
+    print("Craqueur de hachages — démonstration\n")
 
     SEP = "  " + "─" * 60
 
     # ── Phase 1 : Identification de hachages ────────────────────
     print("  ─────────────────────────────────────────────────────────")
-    print("  🔍  PHASE 1 : IDENTIFICATION")
+    print("  PHASE 1 : IDENTIFICATION")
     print("  ─────────────────────────────────────────────────────────\n")
 
     test_hashes = [
@@ -614,7 +605,7 @@ def run_demo():
 
     # ── Phase 2 : Craquage MD5 ───────────────────────────────────
     print(SEP)
-    print("  💀  PHASE 2 : CRAQUAGE MD5 (démonstration)")
+    print("  PHASE 2 : CRAQUAGE MD5 (démonstration)")
     print(SEP + "\n")
 
     # Créer des hachages MD5 de mots de passe connus
@@ -627,7 +618,7 @@ def run_demo():
 
     cracker = HashCracker(algorithm="md5", verbose=True)
     for user, h in test_cases:
-        print(f"\n  👤  {user} — MD5: {h}")
+        print(f"\n  {user} — MD5: {h}")
         cracker.stats["attempts"] = 0
         result = cracker.attack_dictionary(h, PasswordAuditor.BUILTIN_WORDLIST)
         if not result:
@@ -636,7 +627,7 @@ def run_demo():
 
     # ── Phase 3 : Audit de base de données ──────────────────────
     print(f"\n{SEP}")
-    print("  📊  PHASE 3 : AUDIT D'UNE BASE MD5 (5 comptes)")
+    print("  PHASE 3 : AUDIT D'UNE BASE MD5 (5 comptes)")
     print(SEP)
 
     db_dump = [
@@ -652,7 +643,7 @@ def run_demo():
 
     # ── Phase 4 : Benchmark ──────────────────────────────────────
     print(f"\n{SEP}")
-    print("  ⚡  PHASE 4 : BENCHMARK — POURQUOI MD5 EST DANGEREUX")
+    print("  PHASE 4 : BENCHMARK — POURQUOI MD5 EST DANGEREUX")
     print(SEP + "\n")
 
     benchmarks = benchmark_algorithms()
@@ -674,7 +665,7 @@ def run_demo():
     rate = audit_result["cracked_rate"]
     print(f"""
 {SEP}
-  📋  BILAN
+  BILAN
 
   Sur 5 comptes audités avec hachage MD5 :
   → {audit_result['cracked']}/5 mots de passe craqués ({rate}%)

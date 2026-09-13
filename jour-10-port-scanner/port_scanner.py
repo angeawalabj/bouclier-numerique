@@ -1,31 +1,29 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 10 : SCANNER DE PORTS INTERNE    ║
-║  Objectif  : Détecter les portes dangereuses ouvertes en réseau  ║
-║  Scope     : Réseau local entreprise · Poste local · Services   ║
-║  Alertes   : Ports critiques · Services non autorisés · Shadow IT║
-╚══════════════════════════════════════════════════════════════════╝
+"""Scanner de ports TCP pour audits réseau internes, avec une base de risques maintenue à la main.
 
-Problème concret : Un employé installe un serveur FTP pour
-"partager des fichiers facilement", ouvre le port 21 sur son
-poste, et expose sans le savoir tous ses fichiers à quiconque
-sur le réseau interne — ou pire, via le firewall d'entreprise.
+La façon la plus courante dont un réseau s'expose discrètement n'est pas
+un attaquant — c'est un employé qui monte une instance MySQL locale, un
+serveur FTP « juste pour déplacer des fichiers », ou un notebook Jupyter
+laissé à l'écoute sur 0.0.0.0. Rien de malveillant là-dedans, mais chaque
+cas est une porte que personne n'avait l'intention de laisser ouverte. Ce
+script fait un scan TCP connect classique (pas de raw sockets, pas
+d'asyncio — un pool de threads suffit largement pour le nombre de ports
+concernés ici et ne nécessite pas les droits root) et croise tout port
+ouvert avec une table maintenue à la main des ports soit non chiffrés par
+conception (FTP, Telnet), soit couramment déployés sans authentification
+(Redis, MongoDB, Elasticsearch), soit simplement mauvais à exposer
+(Jupyter, l'API non authentifiée de Docker). Il lit aussi
+`/proc/net/tcp` (ou utilise psutil si disponible) pour montrer ce qui
+écoute réellement sur la machine locale, rattaché au processus
+propriétaire.
 
-Ce scanner détecte ces "Shadow IT" silencieux :
-  • Ports de base de données exposés (3306 MySQL, 5432 PostgreSQL)
-  • Serveurs FTP/Telnet en clair (21, 23) — protocoles non chiffrés
-  • Interfaces d'administration exposées (8080, 8443, 9200 Elasticsearch)
-  • Services de debug ouverts (4444 Metasploit, 5900 VNC)
-  • Partages de fichiers non autorisés (445 SMB, 2049 NFS)
-
-Conformité ISO 27001 — Contrôle A.13.1.1 :
-  "Les réseaux doivent être gérés et contrôlés pour protéger
-   les informations dans les systèmes et applications."
-
-Conformité RGPD Art. 32 :
-  "Des mesures pour garantir la confidentialité, l'intégrité et
-   la disponibilité des systèmes de traitement."
+Ça correspond au contrôle A.13.1.1 de l'ISO 27001 (les réseaux doivent
+être gérés et contrôlés pour protéger les informations dans les systèmes
+et applications) et à l'Art. 32 RGPD (mesures techniques pour garantir la
+confidentialité et l'intégrité des systèmes de traitement) — mais la
+valeur pratique est plus simple : la plupart de ces constats sont
+corrigés le jour même où ils sont trouvés, parce que personne n'avait
+l'intention d'exposer le service au départ.
 """
 
 import os
@@ -204,7 +202,7 @@ class PortScanner:
         if total > 254:
             all_hosts = all_hosts[:254]
 
-        print(f"  🌐  Scan du réseau {network} — {min(total, 254)} hôtes")
+        print(f"  Scan du réseau {network} — {min(total, 254)} hôtes")
 
         for i, host in enumerate(all_hosts):
             host_str = str(host)
@@ -335,13 +333,13 @@ def analyser_resultats(scan_results: list) -> dict:
     )
 
     if score_risque == 0:
-        niveau = "✅ SÛRE"
+        niveau = "SURE"
     elif score_risque <= 5:
-        niveau = "🟡 ACCEPTABLE"
+        niveau = "ACCEPTABLE"
     elif score_risque <= 15:
-        niveau = "🟠 RISQUÉ"
+        niveau = "RISQUEE"
     else:
-        niveau = "🔴 CRITIQUE"
+        niveau = "CRITIQUE"
 
     return {
         "score":       score_risque,
@@ -412,10 +410,10 @@ def run_demo():
         "  employés sans malveillance mais sans formation sécu.\n"
     )
 
-    # ── Étape 1 : Scan du localhost ──
-    print(f"  {'─'*60}")
-    print(f"  🔍  ÉTAPE 1 : AUDIT DU POSTE LOCAL")
-    print(f"  {'─'*60}\n")
+    # Etape 1 : Scan du localhost
+    print(f"  {'-'*60}")
+    print(f"  ETAPE 1 : AUDIT DU POSTE LOCAL")
+    print(f"  {'-'*60}\n")
 
     scanner   = PortScanner(timeout=0.3)
     local_res = scanner.scan_localhost()
@@ -423,20 +421,18 @@ def run_demo():
     if local_res:
         print(f"  Ports en écoute sur ce poste ({len(local_res)} détectés) :\n")
         print(f"  {'Port':<8} {'Service':<22} {'Risque':<12} {'Processus':<20} Description")
-        print(f"  {'─'*8} {'─'*22} {'─'*12} {'─'*20} {'─'*30}")
+        print(f"  {'-'*8} {'-'*22} {'-'*12} {'-'*20} {'-'*30}")
         for r in local_res:
-            icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "ELEVÉ": "🟠",
-                    "MODÉRÉ": "🟡", "FAIBLE": "🔵"}.get(r["risque"], "⚪")
             print(f"  {r['port']:<8} {r['service']:<22} "
-                  f"{icon} {r['risque']:<10} "
+                  f"{r['risque']:<12} "
                   f"{r['process']:<20} {r['desc'][:40]}")
     else:
-        print("  Aucun port dangereux détecté sur ce poste. ✅")
+        print("  Aucun port dangereux détecté sur ce poste.")
 
-    # ── Étape 2 : Scan de ports ciblé (simulation réaliste) ──
-    print(f"\n  {'─'*60}")
-    print(f"  🎭  ÉTAPE 2 : SIMULATION RÉSEAU ENTREPRISE")
-    print(f"  {'─'*60}\n")
+    # Etape 2 : Scan de ports ciblé (simulation réaliste)
+    print(f"\n  {'-'*60}")
+    print(f"  ETAPE 2 : SIMULATION RESEAU ENTREPRISE")
+    print(f"  {'-'*60}\n")
 
     # Simulation de 4 postes avec des ports "problématiques"
     simulated_network = {
@@ -487,39 +483,37 @@ def run_demo():
     all_findings = []
     for host, ports in simulated_network.items():
         desc = descriptions.get(host, "Hôte inconnu")
-        print(f"  📍  {host}  —  {desc}")
+        print(f"  {host}  —  {desc}")
 
         for p in sorted(ports, key=lambda x: RISQUE_PRIO.get(x["risque"], 3)):
-            icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "ELEVÉ": "🟠",
-                    "MODÉRÉ": "🟡", "FAIBLE": "🔵"}.get(p["risque"], "⚪")
             banner_str = f"  [{p['banner'][:35]}]" if p.get("banner") else ""
-            print(f"      {icon} Port {p['port']:<6} {p['service']:<22} {p['risque']}")
-            print(f"         └─ {p['desc']}{banner_str}")
+            print(f"      Port {p['port']:<6} {p['service']:<22} {p['risque']}")
+            print(f"         -> {p['desc']}{banner_str}")
             all_findings.append(p)
 
         print()
 
-    # ── Étape 3 : Analyse de risque ──
-    print(f"  {'─'*60}")
-    print(f"  📊  ÉTAPE 3 : ANALYSE DE RISQUE")
-    print(f"  {'─'*60}\n")
+    # Etape 3 : Analyse de risque
+    print(f"  {'-'*60}")
+    print(f"  ETAPE 3 : ANALYSE DE RISQUE")
+    print(f"  {'-'*60}\n")
 
     critique_found = [p for p in all_findings if p["risque"] == "CRITIQUE"]
     eleve_found    = [p for p in all_findings if p["risque"] in ("ÉLEVÉ", "ELEVÉ")]
     modere_found   = [p for p in all_findings if p["risque"] == "MODÉRÉ"]
 
-    print(f"  🔴 CRITIQUE  : {len(critique_found)} ports  {[str(p['port']) for p in critique_found]}")
-    print(f"  🟠 ÉLEVÉ     : {len(eleve_found)} ports  {[str(p['port']) for p in eleve_found]}")
-    print(f"  🟡 MODÉRÉ    : {len(modere_found)} ports  {[str(p['port']) for p in modere_found]}")
+    print(f"  CRITIQUE  : {len(critique_found)} ports  {[str(p['port']) for p in critique_found]}")
+    print(f"  ÉLEVÉ     : {len(eleve_found)} ports  {[str(p['port']) for p in eleve_found]}")
+    print(f"  MODÉRÉ    : {len(modere_found)} ports  {[str(p['port']) for p in modere_found]}")
 
     score = len(critique_found) * 10 + len(eleve_found) * 5 + len(modere_found) * 2
-    bar   = "█" * min(score, 30) + "░" * max(0, 30 - score)
-    print(f"\n  Score de risque : [{bar}] {score} — 🔴 CRITIQUE")
+    bar   = "#" * min(score, 30) + "." * max(0, 30 - score)
+    print(f"\n  Score de risque (indicatif) : [{bar}] {score} — CRITIQUE")
 
-    # ── Étape 4 : Recommandations par port ──
-    print(f"\n  {'─'*60}")
-    print(f"  🎯  ÉTAPE 4 : PLAN DE REMÉDIATION PRIORISÉ")
-    print(f"  {'─'*60}\n")
+    # Etape 4 : Recommandations par port
+    print(f"\n  {'-'*60}")
+    print(f"  ETAPE 4 : PLAN DE REMEDIATION PRIORISE")
+    print(f"  {'-'*60}\n")
 
     prio = 1
     for port_info in sorted(all_findings,
@@ -529,38 +523,37 @@ def run_demo():
         recs = generer_recommandations(port_info)
         if not recs:
             continue
-        icon = "🔴" if port_info["risque"] == "CRITIQUE" else "🟠"
-        print(f"  {prio}. {icon} Port {port_info['port']} — {port_info['service']} "
+        print(f"  {prio}. Port {port_info['port']} — {port_info['service']} "
               f"({port_info['host']})")
         for rec in recs:
-            print(f"     → {rec}")
+            print(f"     -> {rec}")
         print()
         prio += 1
 
-    # ── Bilan ──
+    # Bilan
     print(f"\n{SEP}")
-    print(f"  📋  BILAN SÉCURITÉ RÉSEAU INTERNE")
+    print(f"  BILAN SECURITE RESEAU INTERNE")
     print(f"{SEP}\n")
     print(
         "  Risques identifiés :\n"
-        "  🔴  FTP port 21 (Alice) : mots de passe en clair sniffables\n"
+        "  FTP port 21 (Alice) : mots de passe en clair sniffables\n"
         "      depuis n'importe quel poste du réseau local\n"
-        "  🔴  MySQL port 3306 (Alice) : accès DB sans whitelist IP\n"
-        "      → n'importe qui sur le réseau peut tenter une connexion\n"
-        "  🔴  Jupyter port 8888 (Charlie) : exécution de code Python\n"
+        "  MySQL port 3306 (Alice) : accès DB sans whitelist IP\n"
+        "      -> n'importe qui sur le réseau peut tenter une connexion\n"
+        "  Jupyter port 8888 (Charlie) : exécution de code Python\n"
         "      arbitraire depuis le navigateur — sans authentification\n"
-        "  🔴  Redis port 6379 (Charlie) : lecture/écriture de cache\n"
+        "  Redis port 6379 (Charlie) : lecture/écriture de cache\n"
         "      sans auth — vol de sessions utilisateurs possible\n"
-        "  🔴  Telnet port 23 (NAS) : admin du NAS en clair\n"
-        "      → credentials admin lisibles par Wireshark\n"
+        "  Telnet port 23 (NAS) : admin du NAS en clair\n"
+        "      -> credentials admin lisibles par Wireshark\n"
         "\n"
         "  Ces failles existent sans malveillance : ce sont des\n"
         "  outils de dev/productivité mal configurés.\n"
         "\n"
         "  ISO 27001 A.13.1.1 — Gestion des réseaux :\n"
-        "  ✅  Audit trimestriel des ports recommandé\n"
-        "  ✅  Politique : tout port non déclaré = fermé\n"
-        "  ✅  Segmentation réseau (VLAN dev / prod / admin)\n"
+        "  Audit trimestriel des ports recommandé\n"
+        "  Politique : tout port non déclaré = fermé\n"
+        "  Segmentation réseau (VLAN dev / prod / admin)\n"
         "\n"
         "  Usage :\n"
         "  python3 port_scanner.py local             # Audit du poste local\n"
@@ -596,18 +589,16 @@ def main():
     scanner = PortScanner()
 
     if args.cmd == "local":
-        print("\n  🔍  Audit du poste local...\n")
+        print("\n  Audit du poste local...\n")
         results = scanner.scan_localhost()
         if not results:
-            print("  ✅  Aucun port dangereux détecté.")
+            print("  Aucun port dangereux détecté.")
             return
         for r in results:
-            icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "MODÉRÉ": "🟡",
-                    "FAIBLE": "🔵"}.get(r["risque"], "⚪")
-            print(f"  {icon} Port {r['port']:<6} {r['service']:<20} "
+            print(f"  [{r['risque']:<9}] Port {r['port']:<6} {r['service']:<20} "
                   f"[{r['process']}] {r['desc'][:50]}")
             for rec in generer_recommandations(r):
-                print(f"       → {rec}")
+                print(f"       -> {rec}")
 
     elif args.cmd == "scan":
         if args.ports == "critiques":
@@ -626,11 +617,9 @@ def main():
         total = sum(len(v) for v in results.values())
         print(f"\n  Résultats : {len(results)} hôtes · {total} ports ouverts\n")
         for host, ports_list in results.items():
-            print(f"  📍  {host}")
+            print(f"  {host}")
             for p in ports_list:
-                icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "MODÉRÉ": "🟡"}.get(
-                    p.get("risque", ""), "⚪")
-                print(f"     {icon} {p['port']:<6} {p['service']}")
+                print(f"     [{p.get('risque', '?'):<9}] {p['port']:<6} {p['service']}")
 
 
 if __name__ == "__main__":

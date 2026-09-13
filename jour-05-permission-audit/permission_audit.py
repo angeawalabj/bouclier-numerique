@@ -1,32 +1,27 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 5 : AUDIT DES PERMISSIONS        ║
-║  Cible  : Linux desktop · Android (ADB) · macOS                  ║
-║  Détecte: Caméra · Micro · GPS · Contacts · SMS · Stockage      ║
-╚══════════════════════════════════════════════════════════════════╝
+Repérer les applications installées dont les permissions accordées ne
+correspondent pas à ce que leur nom annonce — une lampe torche avec accès
+micro et contacts, une calculatrice avec accès caméra et GPS.
 
-Exigence légale : Art. 5(1)(b) RGPD — Principe de "limitation
-des finalités" : une application n'est autorisée à collecter
-que ce qui est strictement nécessaire à sa fonction déclarée.
-Principe de "minimisation" : Art. 5(1)(c).
-
-Problème : Sur smartphone, des dizaines d'applications ont
-accumulé des permissions qu'elles n'utilisent pas ou plus —
-souvent accordées par inadvertance lors d'une installation.
-Une application de lampe de poche qui accède aux contacts ou
-au micro est une violation caractérisée du RGPD et un vecteur
-d'espionnage potentiel.
-
-Solution technique : Scanner automatiquement toutes les
-applications installées et leurs permissions déclarées, les
-croiser avec leurs fonctions réelles, et générer un rapport
-de risque avec recommandations de révocation.
-
-Risque évité : Fuite de données personnelles silencieuse,
-espionnage ambient, tracking de localisation non consenti.
-Amende : Art. 83 §5 — jusqu'à 20M€ ou 4% CA mondial pour
-traitement illicite de données (micro/caméra sans consentement).
+Sur Android, il n'existe pas d'API structurée propre pour « lister toutes
+les permissions runtime accordées, pour chaque app » via ADB :
+`adb shell dumpsys package <pkg>` déverse un gros bloc de texte
+faiblement structuré par app, donc ce module le parse par regex en
+cherchant les lignes `granted=true/false` et `uses-permission:` plutôt
+qu'avec un vrai parseur — c'est tout ce que la plateforme donne en dehors
+d'un appareil rooté ou du processus de review du Play Store. La détection
+d'anomalie est un ensemble d'heuristiques basées sur le nom (« torch »
+porte-t-il RECORD_AUDIO ou READ_SMS ?) plutôt qu'une inspection du
+comportement réel de l'app : le résultat est pensé comme une liste à
+faire vérifier par un humain — ou une politique MDM — pas comme un
+verdict définitif. Sous Linux, une vérification complémentaire parcourt
+`/proc/*/fd` pour voir quels processus détiennent actuellement un
+descripteur ouvert sur un périphérique caméra ou micro, un signal bien
+plus léger que de s'accrocher directement au sous-système audio/vidéo.
+Les articles 5(1)(b) (limitation des finalités) et 5(1)(c)
+(minimisation) du RGPD sont l'accroche légale : une app n'est censée
+collecter que ce que sa finalité déclarée exige réellement.
 """
 
 import os
@@ -44,47 +39,47 @@ from typing import Optional
 # ─── Niveaux de risque des permissions ───────────────────────────
 
 PERMISSION_RISK = {
-    # 🔴 CRITIQUE — accès direct au corps/vie privée
-    "CAMERA":                   ("🔴 CRITIQUE",  "Accès caméra — peut capturer vidéo/photo"),
-    "RECORD_AUDIO":             ("🔴 CRITIQUE",  "Accès micro — peut enregistrer en continu"),
-    "ACCESS_FINE_LOCATION":     ("🔴 CRITIQUE",  "GPS précis (±3m) — tracking de localisation"),
-    "PROCESS_OUTGOING_CALLS":   ("🔴 CRITIQUE",  "Interception des appels sortants"),
-    "READ_PHONE_STATE":         ("🔴 CRITIQUE",  "IMEI, numéro téléphone, état appels"),
-    "BODY_SENSORS":             ("🔴 CRITIQUE",  "Accès capteurs biométriques"),
+    # Critique — accès direct au corps/vie privée
+    "CAMERA":                   ("CRITIQUE",  "Accès caméra — peut capturer vidéo/photo"),
+    "RECORD_AUDIO":             ("CRITIQUE",  "Accès micro — peut enregistrer en continu"),
+    "ACCESS_FINE_LOCATION":     ("CRITIQUE",  "GPS précis (±3m) — tracking de localisation"),
+    "PROCESS_OUTGOING_CALLS":   ("CRITIQUE",  "Interception des appels sortants"),
+    "READ_PHONE_STATE":         ("CRITIQUE",  "IMEI, numéro téléphone, état appels"),
+    "BODY_SENSORS":             ("CRITIQUE",  "Accès capteurs biométriques"),
 
-    # 🟠 ÉLEVÉ — données personnelles sensibles
-    "READ_CONTACTS":            ("🟠 ÉLEVÉ",     "Lecture de tous vos contacts"),
-    "WRITE_CONTACTS":           ("🟠 ÉLEVÉ",     "Modification/suppression de contacts"),
-    "READ_SMS":                 ("🟠 ÉLEVÉ",     "Lecture de tous vos SMS (codes 2FA !)"),
-    "SEND_SMS":                 ("🟠 ÉLEVÉ",     "Envoi de SMS (surcoût possible)"),
-    "READ_CALL_LOG":            ("🟠 ÉLEVÉ",     "Historique de tous vos appels"),
-    "WRITE_CALL_LOG":           ("🟠 ÉLEVÉ",     "Modification de l'historique d'appels"),
-    "READ_CALENDAR":            ("🟠 ÉLEVÉ",     "Accès à votre agenda complet"),
-    "WRITE_CALENDAR":           ("🟠 ÉLEVÉ",     "Modification de votre agenda"),
-    "GET_ACCOUNTS":             ("🟠 ÉLEVÉ",     "Liste de tous vos comptes (Google, etc.)"),
-    "USE_BIOMETRIC":            ("🟠 ÉLEVÉ",     "Authentification biométrique"),
-    "USE_FINGERPRINT":          ("🟠 ÉLEVÉ",     "Accès lecteur d'empreintes"),
+    # Élevé — données personnelles sensibles
+    "READ_CONTACTS":            ("ÉLEVÉ",     "Lecture de tous vos contacts"),
+    "WRITE_CONTACTS":           ("ÉLEVÉ",     "Modification/suppression de contacts"),
+    "READ_SMS":                 ("ÉLEVÉ",     "Lecture de tous vos SMS (codes 2FA !)"),
+    "SEND_SMS":                 ("ÉLEVÉ",     "Envoi de SMS (surcoût possible)"),
+    "READ_CALL_LOG":            ("ÉLEVÉ",     "Historique de tous vos appels"),
+    "WRITE_CALL_LOG":           ("ÉLEVÉ",     "Modification de l'historique d'appels"),
+    "READ_CALENDAR":            ("ÉLEVÉ",     "Accès à votre agenda complet"),
+    "WRITE_CALENDAR":           ("ÉLEVÉ",     "Modification de votre agenda"),
+    "GET_ACCOUNTS":             ("ÉLEVÉ",     "Liste de tous vos comptes (Google, etc.)"),
+    "USE_BIOMETRIC":            ("ÉLEVÉ",     "Authentification biométrique"),
+    "USE_FINGERPRINT":          ("ÉLEVÉ",     "Accès lecteur d'empreintes"),
 
-    # 🟡 MODÉRÉ — données comportementales
-    "ACCESS_COARSE_LOCATION":   ("🟡 MODÉRÉ",    "Localisation approximative (±100m)"),
-    "READ_EXTERNAL_STORAGE":    ("🟡 MODÉRÉ",    "Lecture de tous vos fichiers/photos"),
-    "WRITE_EXTERNAL_STORAGE":   ("🟡 MODÉRÉ",    "Écriture sur votre stockage"),
-    "BLUETOOTH":                ("🟡 MODÉRÉ",    "Scan Bluetooth — tracking physique possible"),
-    "BLUETOOTH_SCAN":           ("🟡 MODÉRÉ",    "Scan appareils Bluetooth proches"),
-    "NFC":                      ("🟡 MODÉRÉ",    "Accès puce NFC"),
-    "ACTIVITY_RECOGNITION":     ("🟡 MODÉRÉ",    "Détection marche/course/conduite"),
+    # Modéré — données comportementales
+    "ACCESS_COARSE_LOCATION":   ("MODÉRÉ",    "Localisation approximative (±100m)"),
+    "READ_EXTERNAL_STORAGE":    ("MODÉRÉ",    "Lecture de tous vos fichiers/photos"),
+    "WRITE_EXTERNAL_STORAGE":   ("MODÉRÉ",    "Écriture sur votre stockage"),
+    "BLUETOOTH":                ("MODÉRÉ",    "Scan Bluetooth — tracking physique possible"),
+    "BLUETOOTH_SCAN":           ("MODÉRÉ",    "Scan appareils Bluetooth proches"),
+    "NFC":                      ("MODÉRÉ",    "Accès puce NFC"),
+    "ACTIVITY_RECOGNITION":     ("MODÉRÉ",    "Détection marche/course/conduite"),
 
-    # 🔵 FAIBLE — réseau et services
-    "INTERNET":                 ("🔵 FAIBLE",    "Accès internet (quasi-universel)"),
-    "ACCESS_NETWORK_STATE":     ("🔵 FAIBLE",    "État de la connexion réseau"),
-    "ACCESS_WIFI_STATE":        ("🔵 FAIBLE",    "Infos réseau Wi-Fi connecté"),
-    "CHANGE_WIFI_STATE":        ("🔵 FAIBLE",    "Modification paramètres Wi-Fi"),
-    "VIBRATE":                  ("🔵 FAIBLE",    "Contrôle du vibreur"),
-    "RECEIVE_BOOT_COMPLETED":   ("🔵 FAIBLE",    "Démarrage auto au boot"),
-    "FOREGROUND_SERVICE":       ("🔵 FAIBLE",    "Service en arrière-plan"),
-    "WAKE_LOCK":                ("🔵 FAIBLE",    "Empêche la mise en veille"),
-    "SCHEDULE_EXACT_ALARM":     ("🔵 FAIBLE",    "Alarmes précises"),
-    "POST_NOTIFICATIONS":       ("🔵 FAIBLE",    "Envoi de notifications"),
+    # Faible — réseau et services
+    "INTERNET":                 ("FAIBLE",    "Accès internet (quasi-universel)"),
+    "ACCESS_NETWORK_STATE":     ("FAIBLE",    "État de la connexion réseau"),
+    "ACCESS_WIFI_STATE":        ("FAIBLE",    "Infos réseau Wi-Fi connecté"),
+    "CHANGE_WIFI_STATE":        ("FAIBLE",    "Modification paramètres Wi-Fi"),
+    "VIBRATE":                  ("FAIBLE",    "Contrôle du vibreur"),
+    "RECEIVE_BOOT_COMPLETED":   ("FAIBLE",    "Démarrage auto au boot"),
+    "FOREGROUND_SERVICE":       ("FAIBLE",    "Service en arrière-plan"),
+    "WAKE_LOCK":                ("FAIBLE",    "Empêche la mise en veille"),
+    "SCHEDULE_EXACT_ALARM":     ("FAIBLE",    "Alarmes précises"),
+    "POST_NOTIFICATIONS":       ("FAIBLE",    "Envoi de notifications"),
 }
 
 # Applications légitimes pour certaines permissions (heuristique)
@@ -93,7 +88,7 @@ EXPECTED_PERMISSIONS = {
     "Maps":          {"ACCESS_FINE_LOCATION", "CAMERA", "RECORD_AUDIO"},
     "Instagram":     {"CAMERA", "RECORD_AUDIO", "READ_CONTACTS", "ACCESS_FINE_LOCATION"},
     "WhatsApp":      {"CAMERA", "RECORD_AUDIO", "READ_CONTACTS", "READ_SMS", "ACCESS_FINE_LOCATION"},
-    "Torche":        {"CAMERA"},  # UNIQUEMENT CAMERA — tout le reste est suspect
+    "Torche":        {"CAMERA"},  # uniquement CAMERA — tout le reste est suspect
     "Calculatrice":  set(),
     "Météo":         {"ACCESS_FINE_LOCATION"},
 }
@@ -150,14 +145,14 @@ def audit_linux_devices() -> dict:
                         report["camera_access"].append({
                             "pid": pid, "process": proc_name,
                             "device": link, "cmdline": cmdline,
-                            "risk": "🔴 CRITIQUE"
+                            "risk": "CRITIQUE"
                         })
 
                     elif any(link.startswith(p) for p in audio_patterns):
                         report["audio_access"].append({
                             "pid": pid, "process": proc_name,
                             "device": link, "cmdline": cmdline,
-                            "risk": "🔴 CRITIQUE"
+                            "risk": "CRITIQUE"
                         })
 
                 except (PermissionError, FileNotFoundError):
@@ -182,7 +177,7 @@ def audit_linux_devices() -> dict:
                         "pid":     proc.info["pid"],
                         "process": proc.info["name"],
                         "user":    proc.info.get("username", "?"),
-                        "risk":    "🟠 ÉLEVÉ"
+                        "risk":    "ÉLEVÉ"
                     })
             except:
                 pass
@@ -213,7 +208,7 @@ def audit_linux_network() -> dict:
                             "pid": conn.pid,
                             "process": name,
                             "remote": f"{conn.raddr.ip}:{conn.raddr.port}" if conn.raddr else "?",
-                            "risk": "🟠 ÉLEVÉ — Shell avec connexion active"
+                            "risk": "ÉLEVÉ — Shell avec connexion active"
                         })
                 except:
                     pass
@@ -348,7 +343,7 @@ def analyze_permission_anomalies(package: str, granted: list) -> list:
                 anomalies.append({
                     "permission": perm,
                     "reason": explanation,
-                    "risk": PERMISSION_RISK.get(perm, ("🟡 MODÉRÉ", "Permission suspecte"))[0]
+                    "risk": PERMISSION_RISK.get(perm, ("MODÉRÉ", "Permission suspecte"))[0]
                 })
 
     # Toujours flaguer certaines permissions ultra-sensibles
@@ -358,7 +353,7 @@ def analyze_permission_anomalies(package: str, granted: list) -> list:
             # Vérifier si c'est une app téléphonie légitime
             is_telecom = any(x in pkg_lower for x in ["phone", "dialer", "call", "sms", "messaging"])
             if not is_telecom:
-                risk, desc = PERMISSION_RISK.get(perm, ("🟠 ÉLEVÉ", "Permission sensible"))
+                risk, desc = PERMISSION_RISK.get(perm, ("ÉLEVÉ", "Permission sensible"))
                 anomalies.append({
                     "permission": perm,
                     "reason": f"Permission ultra-sensible sur app non-téléphonie : {desc}",
@@ -393,8 +388,8 @@ def run_android_audit() -> dict:
     packages = get_android_packages()
     report["apps_scanned"] = len(packages)
 
-    print(f"  📱  {len(packages)} application(s) tierces détectées")
-    print(f"  ⏳  Scan des permissions en cours...\n")
+    print(f"  {len(packages)} application(s) tierces détectées")
+    print(f"  Scan des permissions en cours...\n")
 
     for pkg in packages:
         perms = get_app_permissions(pkg)
@@ -429,7 +424,7 @@ def run_android_audit() -> dict:
 
         # Apps à haut risque global
         critical_count = sum(1 for p in granted
-                            if PERMISSION_RISK.get(p, ("", ""))[0] == "🔴 CRITIQUE")
+                            if PERMISSION_RISK.get(p, ("", ""))[0] == "CRITIQUE")
         if critical_count >= 3 and pkg not in EXPECTED_PERMISSIONS:
             report["high_risk"].append({
                 "package": pkg,
@@ -549,11 +544,11 @@ def run_demo():
     SEP = "═" * 62
 
     print(f"\n{SEP}")
-    print("  🎬  DÉMO — Audit de permissions (10 apps simulées)")
+    print("  DÉMO — Audit de permissions (10 apps simulées)")
     print(f"{SEP}\n")
 
-    print("  📱  Appareil : Pixel 7 Pro — Android 14")
-    print(f"  📦  {len(DEMO_APPS)} applications tierces analysées\n")
+    print("  Appareil : Pixel 7 Pro — Android 14")
+    print(f"  {len(DEMO_APPS)} applications tierces analysées\n")
 
     # ── Phase 1 : Scan complet ──
     all_anomalies = []
@@ -584,77 +579,75 @@ def run_demo():
 
     # ── Phase 2 : Vue d'ensemble ──
     print(f"  {'─'*60}")
-    print(f"  📊  VUE D'ENSEMBLE — Accès aux capteurs sensibles")
+    print(f"  VUE D'ENSEMBLE — Accès aux capteurs sensibles")
     print(f"  {'─'*60}")
-    print(f"\n  🎥  Caméra ({len(critical_map['camera'])} apps) :")
+    print(f"\n  Caméra ({len(critical_map['camera'])} apps) :")
     for app in critical_map["camera"]:
-        marker = "⚠️ " if app in ["Super Torche Pro", "Battery Booster & Cleaner",
+        marker = "* " if app in ["Super Torche Pro", "Battery Booster & Cleaner",
                                     "Météo & Prévisions", "Free VPN Proxy"] else "  "
         print(f"     {marker} {app}")
 
-    print(f"\n  🎙️  Microphone ({len(critical_map['microphone'])} apps) :")
+    print(f"\n  Microphone ({len(critical_map['microphone'])} apps) :")
     for app in critical_map["microphone"]:
-        marker = "⚠️ " if app in ["Super Torche Pro", "Battery Booster & Cleaner",
+        marker = "* " if app in ["Super Torche Pro", "Battery Booster & Cleaner",
                                     "Puzzle Games Free", "Free VPN Proxy"] else "  "
         print(f"     {marker} {app}")
 
-    print(f"\n  📍  Localisation ({len(critical_map['location'])} apps) :")
+    print(f"\n  Localisation ({len(critical_map['location'])} apps) :")
     for app in critical_map["location"]:
         print(f"       {app}")
 
-    print(f"\n  💬  SMS ({len(critical_map['sms'])} apps) :")
+    print(f"\n  SMS ({len(critical_map['sms'])} apps) :")
     for app in critical_map["sms"]:
-        print(f"     ⚠️  {app}")
+        print(f"     * {app}")
 
     # ── Phase 3 : Top 5 apps suspectes ──
     print(f"\n  {'─'*60}")
-    print(f"  🚨  TOP {min(5, len(all_anomalies))} APPLICATIONS SUSPECTES")
+    print(f"  TOP {min(5, len(all_anomalies))} APPLICATIONS SUSPECTES")
     print(f"  {'─'*60}")
 
     for i, app in enumerate(all_anomalies[:5], 1):
         print(f"\n  [{i}] {app['label']}")
         print(f"       Package    : {app['package']}")
-        print(f"       Score      : {'🔴' * min(app['risk_score'], 5)} ({app['risk_score']} pts)")
+        print(f"       Score      : {'█' * min(app['risk_score'], 5)} ({app['risk_score']} pts)")
         print(f"       Permissions accordées ({len(app['granted'])}) : "
               f"{', '.join(app['granted'][:5])}{'...' if len(app['granted']) > 5 else ''}")
         print(f"       Anomalies :")
         for a in app["anomalies"]:
-            print(f"         {a['risk']} {a['permission']} — {a['reason']}")
+            print(f"         [{a['risk']}] {a['permission']} — {a['reason']}")
 
     # ── Phase 4 : Commandes de révocation ──
     print(f"\n  {'─'*60}")
-    print(f"  🔧  COMMANDES DE RÉVOCATION (ADB)")
+    print(f"  COMMANDES DE RÉVOCATION (ADB)")
     print(f"  {'─'*60}")
     print("  Copiez-collez ces commandes pour révoquer les accès suspects :\n")
 
     revoke_cmds = generate_revocation_commands(all_anomalies)
     for cmd in revoke_cmds[:8]:
-        print(f"  {cmd['risk'][:2]}  {cmd['command']}")
+        print(f"  [{cmd['risk']}]  {cmd['command']}")
         print(f"      → {cmd['reason']}\n")
 
     # ── Phase 5 : Bilan RGPD ──
     print(f"\n  {SEP}")
-    print(f"  📋  BILAN RGPD — Responsabilités légales")
+    print(f"  BILAN RGPD — Responsabilités légales")
     print(f"  {SEP}")
     print(f"""
-  ┌──────────────────────────────────────────────────────────┐
-  │  RGPD — Art. 5(1)(b) : LIMITATION DES FINALITÉS         │
-  │                                                          │
-  │  "Super Torche Pro" déclare éclairer avec la LED.        │
-  │  Elle accède en réalité au micro, GPS et contacts.       │
-  │  → Traitement sans base légale = infraction Art. 6 RGPD  │
-  │  → Amende possible : jusqu'à 20M€ (Art. 83 §5)          │
-  │                                                          │
-  │  POUR UNE ENTREPRISE (MDM) :                             │
-  │  • Politique BYOD : interdire apps non-validées          │
-  │  • Audit trimestriel avec ce script                      │
-  │  • Révocation automatique sur appareils professionnels   │
-  └──────────────────────────────────────────────────────────┘
+  RGPD — Art. 5(1)(b) : limitation des finalités
+
+  "Super Torche Pro" déclare éclairer avec la LED.
+  Elle accède en réalité au micro, GPS et contacts.
+  → Traitement sans base légale = infraction Art. 6 RGPD
+  → Amende possible : jusqu'à 20M€ (Art. 83 §5)
+
+  Pour une entreprise (MDM) :
+  • Politique BYOD : interdire les apps non validées
+  • Audit trimestriel avec ce script
+  • Révocation automatique sur les appareils professionnels
 
   Risques supplémentaires identifiés :
-  • {len(critical_map['microphone'])} apps avec accès micro → Réunions d'entreprise exposées
-  • {len(critical_map['sms'])} app(s) avec accès SMS → Codes 2FA interceptables
-  • "Free VPN Proxy" : accès appels + SMS + contacts = spyware probable
+  • {len(critical_map['microphone'])} apps avec accès micro → réunions d'entreprise exposées
+  • {len(critical_map['sms'])} app(s) avec accès SMS → codes 2FA interceptables
+  • "Free VPN Proxy" : accès appels + SMS + contacts = profil de spyware probable
 """)
 
     # ── Rapport JSON ──
@@ -678,8 +671,8 @@ def run_demo():
     with open(report_path, "w") as f:
         json.dump(report_data, f, indent=2, ensure_ascii=False)
 
-    print(f"  💾  Rapport JSON sauvegardé : {report_path}")
-    print(f"\n  📌  Usage sur un vrai appareil Android :")
+    print(f"  Rapport JSON sauvegardé : {report_path}")
+    print(f"\n  Usage sur un vrai appareil Android :")
     print(f"     1. Activez 'Débogage USB' dans Paramètres → Options dev")
     print(f"     2. Branchez et autorisez la connexion ADB")
     print(f"     3. python3 permission_audit.py android")
@@ -698,14 +691,13 @@ Usage :
 """
 
 def main():
-    print(__doc__)
     args = sys.argv[1:]
 
     if not args or args[0] == "demo":
         run_demo()
 
     elif args[0] == "linux":
-        print(f"\n  🐧  Audit Linux en cours...\n")
+        print(f"\n  Audit Linux en cours...\n")
         report = audit_linux_devices()
         net    = audit_linux_network()
 
@@ -713,35 +705,35 @@ def main():
         mic = report["audio_access"]
         sus = report["suspicious"] + net.get("suspicious_connections", [])
 
-        print(f"  🎥  Accès caméra live : {len(cam)} processus")
+        print(f"  Accès caméra live : {len(cam)} processus")
         for p in cam:
-            print(f"     {p['risk']} PID {p['pid']} — {p['process']} → {p['device']}")
+            print(f"     [{p['risk']}] PID {p['pid']} — {p['process']} → {p['device']}")
 
-        print(f"\n  🎙️  Accès audio live : {len(mic)} processus")
+        print(f"\n  Accès audio live : {len(mic)} processus")
         for p in mic:
-            print(f"     {p['risk']} PID {p['pid']} — {p['process']} → {p['device']}")
+            print(f"     [{p['risk']}] PID {p['pid']} — {p['process']} → {p['device']}")
 
-        print(f"\n  ⚠️  Processus suspects : {len(sus)}")
+        print(f"\n  Processus suspects : {len(sus)}")
         for p in sus:
-            print(f"     {p.get('risk', '?')} {p.get('process', p.get('name', '?'))}")
+            print(f"     [{p.get('risk', '?')}] {p.get('process', p.get('name', '?'))}")
 
         if not cam and not mic and not sus:
-            print(f"\n  ✅  Aucun accès suspect détecté actuellement.")
+            print(f"\n  Aucun accès suspect détecté actuellement.")
 
     elif args[0] == "android":
         if not check_adb_available():
-            print("  ❌  ADB non trouvé. Installez Android Platform Tools.")
-            print("       https://developer.android.com/tools/releases/platform-tools")
+            print("  ADB non trouvé. Installez Android Platform Tools.")
+            print("  https://developer.android.com/tools/releases/platform-tools")
             sys.exit(1)
 
         device = adb_run(["devices"])
         if not device or "device" not in device:
-            print("  ❌  Aucun appareil Android connecté.")
+            print("  Aucun appareil Android connecté.")
             sys.exit(1)
 
         report = run_android_audit()
 
-        print(f"\n  📊  RÉSUMÉ :")
+        print(f"\n  RÉSUMÉ :")
         s = report["summary"]
         print(f"  Apps scannées  : {report['apps_scanned']}")
         print(f"  Avec caméra    : {s['apps_with_camera']}")
@@ -752,15 +744,15 @@ def main():
 
         if "--revoke" in args:
             cmds = generate_revocation_commands(report["anomalies"])
-            print(f"\n  🔧  Révocation de {len(cmds)} permissions...")
+            print(f"\n  Révocation de {len(cmds)} permissions...")
             for cmd in cmds:
                 os.system(cmd["command"])
-                print(f"  ✅  Révoqué : {cmd['perm']} → {cmd['app']}")
+                print(f"  Révoqué : {cmd['perm']} → {cmd['app']}")
 
         out = Path("android_permission_audit.json")
         with open(out, "w") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
-        print(f"\n  💾  Rapport : {out}")
+        print(f"\n  Rapport : {out}")
 
     else:
         print(USAGE)

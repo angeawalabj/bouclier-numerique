@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 """
-╔════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 2 : L'EFFACEUR DE MÉTADONNÉES  ║
-║  Standard : EXIF 2.3, XMP, IPTC                                ║
-║  Librairie : Pillow (PIL) — zéro dépendance externe            ║
-╚════════════════════════════════════════════════════════════════╝
+Effacer les métadonnées identifiantes et de localisation d'une image avant
+qu'elle ne soit partagée.
 
-Exigence légale : Art. 5(1)(c) RGPD — Principe de "minimisation
-des données" : ne collecter/diffuser que ce qui est strictement
-nécessaire à la finalité.
+Une photo de téléphone transporte bien plus que des pixels : des
+coordonnées GPS précises à quelques mètres, le numéro de série de
+l'appareil, le nom du propriétaire s'il a été renseigné dans l'app photo,
+et un horodatage précis. Des journalistes et des militants ont été
+retrouvés de cette façon après avoir publié des photos qui conservaient
+encore leur bloc EXIF. L'Art. 5(1)(c) du RGPD (minimisation des données)
+est l'accroche légale, mais le risque pratique est plus simple que le
+texte de loi : toute métadonnée embarquée dans un fichier devient
+publique au moment où le fichier l'est.
 
-Problème : Une photo prise avec un smartphone contient jusqu'à
-60+ champs cachés : coordonnées GPS précises, modèle d'appareil,
-numéro de série, date/heure exacte, nom du propriétaire,
-logiciel utilisé, etc. Partager cette photo = partager votre
-localisation, votre identité et votre matériel.
-
-Solution technique : Nettoyer tous les blocs de métadonnées
-(EXIF, IPTC, XMP) avant publication. Rapport détaillé de ce
-qui a été supprimé.
-
-Risque évité : Fuite de domicile, de routine, d'identité.
-Exemple réel : Des journalistes et activistes ont été localisés
-via les EXIF de photos publiées en ligne.
+Plutôt que de supprimer les tags EXIF connus un par un, cet outil ré-encode
+l'image à partir des pixels décodés et la réécrit avec un bloc EXIF vide.
+Les tags propriétaires ("maker notes") et autres identifiants non
+documentés peuvent porter les mêmes données GPS ou de numéro de série sous
+des numéros de tag qu'un nettoyeur sélectif ne reconnaîtrait pas :
+reconstruire le fichier depuis zéro élimine toute une classe de fuites
+« cachées dans un tag qu'on ne connaissait pas », plutôt que de courir
+après une liste de tags identifiés comme problématiques.
 """
 
 import os
@@ -39,11 +37,11 @@ import argparse
 # ─── Catégories de métadonnées sensibles ──────────────────────────
 
 SENSITIVE_TAGS = {
-    # 🔴 CRITIQUE — Localisation GPS
+    # Critique — Localisation GPS
     "GPS": {
         0x8825,  # GPSInfo (bloc entier)
     },
-    # 🔴 CRITIQUE — Identité
+    # Critique — Identité
     "Identité": {
         0x013b,  # Artist
         0x8298,  # Copyright
@@ -57,7 +55,7 @@ SENSITIVE_TAGS = {
         0xa434,  # LensModel
         0xa435,  # LensSerialNumber
     },
-    # 🟠 ÉLEVÉ — Traçabilité de l'appareil
+    # Élevé — Traçabilité de l'appareil
     "Appareil": {
         0x010f,  # Make (marque)
         0x0110,  # Model (modèle)
@@ -70,7 +68,7 @@ SENSITIVE_TAGS = {
         0x9011,  # OffsetTimeOriginal
         0x9012,  # OffsetTimeDigitized
     },
-    # 🟡 MODÉRÉ — Informations techniques révélatrices
+    # Modéré — Informations techniques révélatrices
     "Technique": {
         0x0112,  # Orientation
         0xa001,  # ColorSpace
@@ -167,7 +165,7 @@ def analyze_image(path: Path) -> dict:
         "file": str(path),
         "size_kb": round(path.stat().st_size / 1024, 1),
         "format": None,
-        "risk_level": "✅ FAIBLE",
+        "risk_level": "FAIBLE",
         "metadata_found": {},
         "gps_data": None,
         "total_tags": 0,
@@ -182,7 +180,7 @@ def analyze_image(path: Path) -> dict:
 
             exif_data = img.getexif()
             if not exif_data:
-                findings["risk_level"] = "✅ FAIBLE — Aucune métadonnée détectée"
+                findings["risk_level"] = "FAIBLE — Aucune métadonnée détectée"
                 return findings
 
             findings["total_tags"] = len(exif_data)
@@ -209,11 +207,11 @@ def analyze_image(path: Path) -> dict:
 
             # Évaluation du risque
             if findings["gps_data"]:
-                findings["risk_level"] = "🔴 CRITIQUE — Coordonnées GPS trouvées !"
+                findings["risk_level"] = "CRITIQUE — Coordonnées GPS trouvées"
             elif findings["sensitive_count"] > 5:
-                findings["risk_level"] = "🟠 ÉLEVÉ — Nombreuses métadonnées sensibles"
+                findings["risk_level"] = "ÉLEVÉ — Nombreuses métadonnées sensibles"
             elif findings["sensitive_count"] > 0:
-                findings["risk_level"] = "🟡 MODÉRÉ — Métadonnées d'identité présentes"
+                findings["risk_level"] = "MODÉRÉ — Métadonnées d'identité présentes"
 
     except Exception as e:
         findings["error"] = str(e)
@@ -226,16 +224,16 @@ def analyze_image(path: Path) -> dict:
 def clean_image(input_path: Path, output_path: Path, keep_technical: bool = False) -> dict:
     """
     Supprime toutes les métadonnées sensibles d'une image.
-    
+
     Stratégie : Reconstruire l'image depuis les pixels bruts.
     C'est la méthode la plus sûre : aucune métadonnée ne peut
     "se cacher" dans des blocs inconnus.
-    
+
     Args:
         input_path: Image source
         output_path: Image nettoyée
         keep_technical: Si True, garde les infos non-sensibles
-    
+
     Returns:
         Rapport du nettoyage
     """
@@ -338,7 +336,7 @@ def create_test_image(output_path: Path):
 
     # Maintenant injecter un bloc GPS simulé dans le fichier JPEG
     # en ajoutant un commentaire JPEG avec coordonnées (approche alternative)
-    print(f"✅  Image de test créée : {output_path}")
+    print(f"Image de test créée : {output_path}")
     print(f"   Métadonnées injectées : Artist, Copyright, Model, Software,")
     print(f"   DateTimeOriginal, BodySerialNumber, CameraOwnerName")
     print(f"   (GPS simulé dans le rapport d'analyse)")
@@ -349,7 +347,7 @@ def create_test_image(output_path: Path):
 
 def print_analysis(analysis: dict):
     print(f"\n{'═'*60}")
-    print(f"📸  Analyse : {Path(analysis['file']).name}")
+    print(f"Analyse : {Path(analysis['file']).name}")
     print(f"{'═'*60}")
     print(f"   Format      : {analysis.get('format', '?')} | {analysis.get('dimensions', '?')} | {analysis['size_kb']} Ko")
     print(f"   Risque      : {analysis['risk_level']}")
@@ -357,7 +355,7 @@ def print_analysis(analysis: dict):
 
     if analysis.get("gps_data"):
         gps = analysis["gps_data"]
-        print(f"\n   🔴 DONNÉES GPS DÉTECTÉES :")
+        print(f"\n   DONNÉES GPS DÉTECTÉES :")
         if "latitude" in gps:
             print(f"      Latitude  : {gps['latitude']}° {gps.get('latitude_ref', '')}")
         if "longitude" in gps:
@@ -367,10 +365,10 @@ def print_analysis(analysis: dict):
         if "gps_date" in gps and "gps_time_utc" in gps:
             print(f"      Horodatage: {gps['gps_date']} {gps['gps_time_utc']}")
         if "google_maps_url" in gps:
-            print(f"      🗺️  Maps    : {gps['google_maps_url']}")
+            print(f"      Maps      : {gps['google_maps_url']}")
 
     if analysis.get("metadata_found"):
-        print(f"\n   📋 Métadonnées trouvées :")
+        print(f"\n   Métadonnées trouvées :")
         for tag, value in list(analysis["metadata_found"].items())[:15]:
             # Masquer les tags GPS déjà affichés
             if "GPS" not in tag or tag == "GPSInfo":
@@ -381,31 +379,29 @@ def print_analysis(analysis: dict):
 
 def print_report(report: dict):
     print(f"\n{'═'*60}")
-    print(f"🧹  Nettoyage : {Path(report['input']).name}")
+    print(f"Nettoyage : {Path(report['input']).name}")
     print(f"{'═'*60}")
     print(f"   Avant  : {report['size_before_kb']} Ko")
     print(f"   Après  : {report['size_after_kb']} Ko")
     print(f"   Gagné  : {report['size_saved_kb']} Ko")
     print(f"   Tags supprimés : {report['tags_removed_count']}")
     if report.get("gps_removed"):
-        print(f"   🔴 GPS supprimé ✅")
+        print(f"   GPS supprimé")
     if report["removed_tags"]:
         print(f"\n   Tags supprimés :")
         for tag in report["removed_tags"][:10]:
-            print(f"      ✗ {tag}")
+            print(f"      - {tag}")
         if len(report["removed_tags"]) > 10:
             print(f"      ... et {len(report['removed_tags']) - 10} autres")
     if report["kept_tags"]:
         print(f"\n   Tags conservés (non-sensibles) :")
         for tag in report["kept_tags"]:
-            print(f"      ✓ {tag}")
+            print(f"      + {tag}")
 
 
 # ─── Interface CLI ────────────────────────────────────────────────
 
 def main():
-    print(__doc__)
-
     parser = argparse.ArgumentParser(
         description="Effaceur de métadonnées EXIF — Bouclier Numérique Jour 2",
         add_help=True
@@ -432,45 +428,45 @@ def main():
 
     # ─ DEMO ─
     if args.command == "demo" or args.command is None:
-        print("🎬  MODE DÉMO — Simulation complète\n")
+        print("MODE DÉMO — Simulation complète\n")
 
         test_img = Path("/tmp/test_photo_vacances.jpg")
         clean_img = Path("/tmp/test_photo_vacances_CLEAN.jpg")
 
         # Étape 1 : Créer une image avec métadonnées
-        print("📸  Étape 1 : Création d'une photo avec métadonnées EXIF fictives...")
+        print("Étape 1 : Création d'une photo avec métadonnées EXIF fictives...")
         create_test_image(test_img)
 
         # Étape 2 : Analyser
-        print("\n🔍  Étape 2 : Analyse des métadonnées AVANT nettoyage...")
+        print("\nÉtape 2 : Analyse des métadonnées AVANT nettoyage...")
         analysis = analyze_image(test_img)
         print_analysis(analysis)
 
         # Étape 3 : Nettoyer
-        print(f"\n🧹  Étape 3 : Nettoyage en cours...")
+        print(f"\nÉtape 3 : Nettoyage en cours...")
         report = clean_image(test_img, clean_img)
         print_report(report)
 
         # Étape 4 : Vérifier
-        print(f"\n✅  Étape 4 : Vérification de l'image nettoyée...")
+        print(f"\nÉtape 4 : Vérification de l'image nettoyée...")
         verify = verify_clean(clean_img)
         if verify["clean"]:
-            print(f"   🛡️  IMAGE PROPRE — Aucune métadonnée sensible détectée.")
+            print(f"   Image propre — aucune métadonnée sensible détectée.")
         else:
-            print(f"   ⚠️  Tags résiduels détectés : {', '.join(verify['remaining_tags'])}")
+            print(f"   Tags résiduels détectés : {', '.join(verify['remaining_tags'])}")
 
         # Analyse de l'image nettoyée
         analysis_after = analyze_image(clean_img)
         print_analysis(analysis_after)
 
         print(f"\n{'═'*60}")
-        print(f"📊  RÉSUMÉ DE SÉCURITÉ")
+        print(f"RÉSUMÉ DE SÉCURITÉ")
         print(f"{'═'*60}")
-        print(f"   GPS supprimé    : {'✅ Oui' if report['gps_removed'] else '➖ Non présent'}")
-        print(f"   Identité retirée: ✅ {'Jean Dupont' if 'Jean Dupont' in str(analysis.get('metadata_found')) else ''}")
-        print(f"   Modèle retiré   : ✅ {'iPhone 15 Pro' if 'iPhone 15 Pro' in str(analysis.get('metadata_found')) else ''}")
+        print(f"   GPS supprimé    : {'Oui' if report['gps_removed'] else 'Non présent'}")
+        print(f"   Identité retirée: {'Jean Dupont' if 'Jean Dupont' in str(analysis.get('metadata_found')) else ''}")
+        print(f"   Modèle retiré   : {'iPhone 15 Pro' if 'iPhone 15 Pro' in str(analysis.get('metadata_found')) else ''}")
         print(f"   Tags nettoyés   : {report['tags_removed_count']}")
-        print(f"\n   💡 CONSEIL RGPD : Intégrer ce script dans votre pipeline")
+        print(f"\n   Conseil RGPD : Intégrer ce script dans votre pipeline")
         print(f"   de publication (CI/CD, CMS) pour un nettoyage automatique.")
         print(f"   Aucune donnée personnelle ne quitte jamais votre serveur.")
 
@@ -478,7 +474,7 @@ def main():
     elif args.command == "analyze":
         path = Path(args.image)
         if not path.exists():
-            print(f"❌  Fichier introuvable : {path}")
+            print(f"Fichier introuvable : {path}")
             sys.exit(1)
         analysis = analyze_image(path)
         print_analysis(analysis)
@@ -487,7 +483,7 @@ def main():
     elif args.command == "clean":
         input_path = Path(args.image)
         if not input_path.exists():
-            print(f"❌  Fichier introuvable : {input_path}")
+            print(f"Fichier introuvable : {input_path}")
             sys.exit(1)
 
         if args.output:
@@ -495,38 +491,38 @@ def main():
         else:
             output_path = input_path.parent / f"{input_path.stem}_clean{input_path.suffix}"
 
-        print(f"🔍  Analyse en cours...")
+        print(f"Analyse en cours...")
         analysis = analyze_image(input_path)
         print_analysis(analysis)
 
-        print(f"\n🧹  Nettoyage en cours...")
+        print(f"\nNettoyage en cours...")
         report = clean_image(input_path, output_path)
         print_report(report)
 
         verify = verify_clean(output_path)
         if verify["clean"]:
-            print(f"\n🛡️  IMAGE PROPRE — {output_path}")
+            print(f"\nImage propre — {output_path}")
         else:
-            print(f"\n⚠️  Tags résiduels : {', '.join(verify['remaining_tags'])}")
+            print(f"\nTags résiduels : {', '.join(verify['remaining_tags'])}")
 
     # ─ BATCH ─
     elif args.command == "batch":
         folder = Path(args.folder)
         if not folder.is_dir():
-            print(f"❌  Dossier introuvable : {folder}")
+            print(f"Dossier introuvable : {folder}")
             sys.exit(1)
 
         extensions = {".jpg", ".jpeg", ".png", ".webp", ".tiff"}
         images = [f for f in folder.iterdir() if f.suffix.lower() in extensions]
 
         if not images:
-            print(f"❌  Aucune image trouvée dans {folder}")
+            print(f"Aucune image trouvée dans {folder}")
             sys.exit(1)
 
         output_dir = folder / "cleaned"
         output_dir.mkdir(exist_ok=True)
 
-        print(f"📂  {len(images)} image(s) à traiter → {output_dir}\n")
+        print(f"{len(images)} image(s) à traiter → {output_dir}\n")
 
         total_removed = 0
         gps_found = 0
@@ -535,15 +531,15 @@ def main():
             out_path = output_dir / img_path.name
             try:
                 report = clean_image(img_path, out_path)
-                status = "🔴 GPS!" if report["gps_removed"] else "✅"
-                print(f"   {status}  {img_path.name:<30} — {report['tags_removed_count']} tags supprimés")
+                status = "GPS!" if report["gps_removed"] else "OK"
+                print(f"   {status:<5} {img_path.name:<30} — {report['tags_removed_count']} tags supprimés")
                 total_removed += report["tags_removed_count"]
                 if report["gps_removed"]:
                     gps_found += 1
             except Exception as e:
-                print(f"   ❌  {img_path.name}: {e}")
+                print(f"   ERREUR  {img_path.name}: {e}")
 
-        print(f"\n📊  Bilan : {len(images)} images | {total_removed} tags supprimés | {gps_found} GPS retirés")
+        print(f"\nBilan : {len(images)} images | {total_removed} tags supprimés | {gps_found} GPS retirés")
         print(f"   Images nettoyées dans : {output_dir}")
 
 

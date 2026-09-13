@@ -1,36 +1,27 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 7 : LE HONEYPOT (POT DE MIEL)    ║
-║  Type    : Web Honeypot — Fake Admin Panel                       ║
-║  Stack   : Flask · SQLite · SMTP · Threading                     ║
-║  Pièges  : /admin · /wp-admin · /phpmyadmin · /.env · /config   ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Faux panneau d'administration en leurre (honeypot) pour un déploiement Flask.
 
-Exigence légale : Art. 32 RGPD — "mettre en place des procédures
-visant à tester, à analyser et à évaluer régulièrement l'efficacité
-des mesures techniques et organisationnelles."
+La plupart des tentatives d'intrusion automatisées ne touchent jamais la
+logique applicative — elles parcourent une liste fixe de chemins
+(/wp-admin, /phpmyadmin, /.env, /admin) en espérant tomber sur une
+installation par défaut oubliée ou des identifiants qui ont fuité. Ce
+module sert de fausses versions convaincantes de ces chemins, prend
+l'empreinte de chaque visiteur (IP, DNS inverse, user-agent, signatures
+de scanners connus), journalise le contact dans SQLite, et déclenche une
+alerte dès le premier accès. Un délai aléatoire de 2 à 8 secondes est
+ajouté avant de répondre : la plupart des scanners abandonnent après un
+court timeout, donc ce délai leur coûte plus cher qu'à nous, et sert
+aussi d'indice grossier qu'une requête est tombée dans le piège plutôt
+que sur la vraie application.
 
-Principe légal : Un honeypot est légal en France à condition :
-  ✅ Qu'il n'incite pas activement à commettre une infraction
-  ✅ Qu'il se contente de détecter et enregistrer les intrusions
-  ✅ Que les données collectées soient utilisées pour la défense
-  ❌ Il ne peut pas être utilisé comme piège actif pour "hacker back"
-
-Problème : 80% des tentatives d'intrusion ciblent des URLs
-"standard" (wp-admin, phpmyadmin, .env, /admin) en espérant
-trouver des systèmes non protégés ou des credentials par défaut.
-Ces scanners automatiques frappent TOUS les serveurs exposés.
-
-Solution technique :
-  1. Déployer de fausses pages admin ultra-réalistes
-  2. Toute interaction → alerte immédiate + fingerprint complet
-  3. Collecter les patterns d'attaque pour enrichir les blacklists
-  4. Ralentir les scanners (tar pit) pour consommer leur temps
-
-Risque évité : Détection précoce d'une intrusion avant qu'elle
-n'atteigne les vrais systèmes. Valeur forensique : les logs
-honeypot peuvent servir de preuves légales (Art. 323-1 CP).
+Légalement, ça ne tient comme piège passif que sur une infrastructure
+qu'on possède — l'Art. 32 RGPD exige de tester l'efficacité des mesures
+techniques de sécurité, et un honeypot qui se contente de détecter et
+d'enregistrer (jamais n'incite un visiteur à un acte qu'il n'aurait pas
+commis autrement, jamais de « hack back ») répond à cette exigence. Les
+journaux ainsi collectés ont une valeur probatoire au titre de l'Art.
+323-1 du Code pénal (accès frauduleux à un système de traitement
+automatisé de données) en cas de dépôt de plainte.
 """
 
 import os
@@ -206,52 +197,42 @@ def format_alert_email(fp: dict, trap: str,
     cfg = config or HoneypotConfig()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    severity_emoji = {
-        "CRITICAL": "🔴🚨",
-        "HIGH":     "🟠⚠️",
-        "MEDIUM":   "🟡🔔",
-        "LOW":      "🔵ℹ️",
-    }.get(fp["severity"], "🔔")
-
     creds_section = ""
     if creds:
         creds_section = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔑  CREDENTIALS TESTÉS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREDENTIALS TESTES
+------------------
   Login    : {creds.get('username', '?')}
   Password : {creds.get('password', '?')}
   (Stockés pour analyse — à comparer avec vos vrais credentials)
 """
 
     return f"""
-{severity_emoji} ALERTE HONEYPOT — {cfg.FAKE_COMPANY}
+ALERTE HONEYPOT — {cfg.FAKE_COMPANY}
 {'='*50}
   Heure    : {now}
   Sévérité : {fp['severity']}
   Piège    : {trap}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🌐  IDENTIFICATION ATTAQUANT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IDENTIFICATION ATTAQUANT
+-------------------------
   IP       : {fp['ip']}
   Hostname : {fp['hostname']}
   IP Hash  : {fp['ip_hash']} (pseudonymisé)
   User-Agent : {fp['user_agent'][:80]}
-  Bot/Scanner : {'OUI ⚠️' if fp['is_bot'] else 'NON (humain probable)'}
+  Bot/Scanner : {'OUI' if fp['is_bot'] else 'NON (humain probable)'}
   Langue   : {fp['accept_lang'][:30]}
   Referer  : {fp['referer'] or 'direct'}
   URL      : {fp['url']}
 {creds_section}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯  ACTIONS RECOMMANDÉES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTIONS RECOMMANDEES
+--------------------
   1. Ajouter {fp['ip']} à votre firewall/fail2ban
   2. Vérifier les logs de vos vrais systèmes
   3. Conserver cet email comme preuve (Art. 323-1 CP)
   4. Signaler à votre SIEM/SOC si entreprise
 
-{'⚠️  SCANNER DÉTECTÉ : ' + fp['user_agent'][:50] if fp['is_scanner'] else ''}
+{'SCANNER DETECTE : ' + fp['user_agent'][:50] if fp['is_scanner'] else ''}
 
 — Honeypot Bouclier Numérique
 """
@@ -264,13 +245,13 @@ def send_email_alert(fp: dict, trap: str, creds: dict = None,
 
     if cfg.SMTP_USER == "your@gmail.com":
         # Mode démo : simuler l'envoi sans vrai SMTP
-        print(f"\n  📧  [SIMULATION EMAIL] Alerte envoyée à {cfg.ALERT_TO}")
+        print(f"\n  [SIMULATION EMAIL] Alerte envoyée à {cfg.ALERT_TO}")
         print(format_alert_email(fp, trap, creds, cfg))
         return
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"🚨 HONEYPOT ALERT [{fp['severity']}] — {trap} — {fp['ip']}"
+        msg["Subject"] = f"HONEYPOT ALERT [{fp['severity']}] — {trap} — {fp['ip']}"
         msg["From"]    = cfg.SMTP_USER
         msg["To"]      = cfg.ALERT_TO
 
@@ -282,9 +263,9 @@ def send_email_alert(fp: dict, trap: str, creds: dict = None,
             server.login(cfg.SMTP_USER, cfg.SMTP_PASS)
             server.sendmail(cfg.SMTP_USER, cfg.ALERT_TO, msg.as_string())
 
-        print(f"  ✅  Email envoyé : {cfg.ALERT_TO}")
+        print(f"  Email envoyé : {cfg.ALERT_TO}")
     except Exception as e:
-        print(f"  ❌  Erreur email : {e}")
+        print(f"  Erreur email : {e}")
 
 
 def log_intrusion(fp: dict, trap: str, post_data: dict = None,
@@ -564,9 +545,7 @@ def create_honeypot(config: HoneypotConfig = None) -> Flask:
         delay = random.uniform(cfg.TARPIT_DELAY_MIN, cfg.TARPIT_DELAY_MAX)
         time.sleep(delay)
 
-    # ════════════════════════════════════════════════════════════════
-    # PIÈGES — Routes honeypot
-    # ════════════════════════════════════════════════════════════════
+    # ─── Pièges — routes honeypot ───────────────────────────────────
 
     @app.route("/admin")
     @app.route("/admin/")
@@ -688,9 +667,7 @@ define('API_KEY', 'FAKE_API_KEY_DO_NOT_USE');
         tar_pit()
         return "Apache Server Status\nHoneypot active.", 200
 
-    # ════════════════════════════════════════════════════════════════
-    # DASHBOARD — Vue des intrusions (à protéger en prod !)
-    # ════════════════════════════════════════════════════════════════
+    # ─── Dashboard — vue des intrusions (à protéger en prod) ───────
 
     @app.route("/honeypot/dashboard")
     def dashboard():
@@ -744,7 +721,7 @@ define('API_KEY', 'FAKE_API_KEY_DO_NOT_USE');
   td{{padding:7px 8px;border-bottom:1px solid #1a1a1a}}
   tr:hover{{background:#111}}
 </style></head><body>
-<h1>🍯 HONEYPOT DASHBOARD — {cfg.FAKE_COMPANY}</h1>
+<h1>HONEYPOT DASHBOARD — {cfg.FAKE_COMPANY}</h1>
 <div>
   <div class="stat"><div class="n">{stats['total']}</div><div class="l">Total hits</div></div>
   <div class="stat"><div class="n">{stats['unique']}</div><div class="l">IPs uniques</div></div>
@@ -791,16 +768,14 @@ define('API_KEY', 'FAKE_API_KEY_DO_NOT_USE');
     return app
 
 
-# ════════════════════════════════════════════════════════════════
-# SIMULATION DE DÉMONSTRATION
-# ════════════════════════════════════════════════════════════════
+# ─── Simulation de démonstration ───────────────────────────────────
 
 def run_demo():
     """Simule des attaques sur le honeypot sans lancer le serveur HTTP."""
-    SEP = "═" * 62
+    SEP = "-" * 62
 
     print(f"\n{SEP}")
-    print("  🎬  DÉMO HONEYPOT — Simulation d'attaques")
+    print("  DEMO HONEYPOT — Simulation d'attaques")
     print(f"{SEP}\n")
 
     cfg     = HoneypotConfig()
@@ -850,10 +825,10 @@ def run_demo():
     total_intrusions = 0
 
     for attacker in attackers:
-        print(f"  {'─'*60}")
-        print(f"  🔴 {attacker['desc']}")
+        print(f"  {'-'*60}")
+        print(f"  {attacker['desc']}")
         print(f"     IP : {attacker['ip']}  |  UA : {attacker['ua'][:55]}")
-        print(f"  {'─'*60}")
+        print(f"  {'-'*60}")
 
         for url, trap, method, post_data in attacker["attacks"]:
             # Simuler le fingerprinting
@@ -885,8 +860,7 @@ def run_demo():
                 p = post_data.get("password", post_data.get("pwd", "?"))
                 creds_str = f"  login={u} / pwd={p}"
 
-            sev_icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🔵"}.get(severity, "⚪")
-            print(f"  {sev_icon}  [{method:<4}] {url:<25} → Piège: {trap}")
+            print(f"  [{severity:<8}] [{method:<4}] {url:<25} -> Piège: {trap}")
             if creds_str:
                 print(f"       Credentials testés : {creds_str}")
 
@@ -905,14 +879,14 @@ def run_demo():
             "headers": {},
             "accept_lang": "en-US",
         }
-        print(f"\n  📧  Alerte déclenchée :")
-        print(f"      → Email à {cfg.ALERT_TO}")
-        print(f"      → IP {attacker['ip']} ajoutée en watchlist")
+        print(f"\n  Alerte déclenchée :")
+        print(f"      -> Email à {cfg.ALERT_TO}")
+        print(f"      -> IP {attacker['ip']} ajoutée en watchlist")
         print()
 
-    # ── Stats finales ──
+    # Stats finales
     print(f"\n{SEP}")
-    print(f"  📊  TABLEAU DE BORD POST-ATTAQUE")
+    print(f"  TABLEAU DE BORD POST-ATTAQUE")
     print(f"{SEP}")
 
     with sqlite3.connect(db_path) as conn:
@@ -935,15 +909,15 @@ def run_demo():
         print(f"    {r['trap_name']:<28} {bar} ({r['c']})")
 
     if creds:
-        print(f"\n  🔑  Credentials testés par les attaquants ({len(creds)}) :")
+        print(f"\n  Credentials testés par les attaquants ({len(creds)}) :")
         for c in creds:
             print(f"    login={c['username']:<20} pwd={c['password']}")
-        print(f"\n  ⚠️  IMPORTANT : Si un de ces credentials correspond à")
-        print(f"  un vrai compte, changez-le IMMÉDIATEMENT !")
+        print(f"\n  IMPORTANT : si un de ces credentials correspond à")
+        print(f"  un vrai compte, changez-le immédiatement.")
 
     print(f"""
   {SEP}
-  🏗️   DÉPLOIEMENT EN PRODUCTION
+  DEPLOIEMENT EN PRODUCTION
   {SEP}
 
   1. Intégrer le honeypot SUR LE MÊME serveur que l'app réelle
@@ -963,7 +937,7 @@ def run_demo():
   4. Dashboard temps réel :
      http://votreserveur:8080/honeypot/dashboard
 
-  📋  Valeur légale des logs honeypot :
+  Valeur légale des logs honeypot :
   Les logs constituent des preuves recevables pour une plainte
   en vertu de l'Art. 323-1 du Code Pénal (accès frauduleux
   à un système d'information : jusqu'à 3 ans + 100 000€).
@@ -989,7 +963,7 @@ def main():
 
     elif args[0] == "server":
         cfg = HoneypotConfig()
-        print(f"  🍯  Honeypot démarré sur {cfg.HOST}:{cfg.PORT}")
+        print(f"  Honeypot démarré sur {cfg.HOST}:{cfg.PORT}")
         print(f"  Pièges actifs : /admin, /wp-admin, /phpmyadmin,")
         print(f"                  /.env, /config.php, /backup.sql,")
         print(f"                  /.git/config, /api/admin, ...")
@@ -1001,7 +975,7 @@ def main():
     elif args[0] == "stats":
         db_path = HoneypotConfig.DB_PATH
         if not Path(db_path).exists():
-            print("  ❌  Aucune base de données trouvée. Lancez d'abord 'demo' ou 'server'.")
+            print("  Aucune base de données trouvée. Lancez d'abord 'demo' ou 'server'.")
             sys.exit(1)
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row

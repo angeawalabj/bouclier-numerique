@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 14 : GESTIONNAIRE DE CONSENTEMENT ║
-║  Loi      : ePrivacy (Directive 2002/58/CE) + RGPD Art. 6(1)(a) ║
-║  Conforme : CNIL recommandation 2020 · IAB TCF v2.2             ║
-║  Fonctions : Blocage scripts · Consentement granulaire · Audit   ║
-╚══════════════════════════════════════════════════════════════════╝
+Backend de gestion du consentement cookies : catalogue de scripts,
+stockage du consentement avec preuve, et génération du bandeau JS
+conforme CNIL.
 
-Exigence légale :
-  La Directive ePrivacy (art. 5§3) et le RGPD imposent que les
-  cookies non essentiels ne soient déposés QU'APRÈS un consentement
-  libre, spécifique, éclairé et univoque.
+La directive ePrivacy (art. 5§3) exige que les cookies non essentiels
+attendent un consentement libre, spécifique, éclairé et univoque — mais
+ce qui vaut vraiment des sanctions aux entreprises, c'est le détail
+d'implémentation : la CNIL a sanctionné Google, Facebook et Amazon pour
+plus de 200M€ cumulés parce que leur bouton « Refuser » était plus dur à
+atteindre que « Accepter ». Le script de bandeau généré ici ne se
+contente donc pas d'afficher une interface : il patche
+XMLHttpRequest.prototype.open, window.fetch et document.createElement
+avant même que la page ait fini de charger, pour que les scripts tiers
+soient physiquement bloqués au niveau réseau plutôt que simplement
+masqués dans un menu — un bandeau qui se contente de bascules CSS
+n'empêche pas Google Analytics de s'être déjà déclenché au moment où
+quelqu'un clique sur « Refuser ».
 
-  CNIL délibération 2020-091 :
-  • Le consentement doit être aussi facile à retirer qu'à donner
-  • Le bouton "Refuser tout" doit être aussi accessible que "Accepter"
-  • Les finalités doivent être présentées séparément
-  • La preuve du consentement doit être conservée
-
-  Sanctions (CNIL 2022) :
-  • Google   → 150M€ (bannière "Refuser" trop difficile d'accès)
-  • Facebook → 60M€ (même violation)
-  • Amazon   → 35M€
-  Ces amendes ne portent que sur la gestion des cookies.
-
-Ce système implémente :
-  1. Blocage préventif de tous les scripts tiers au chargement
-  2. Consentement granulaire par catégorie (analytics, marketing...)
-  3. Injection conditionnelle des scripts après consentement
-  4. Stockage et preuve du consentement (audit trail)
-  5. Génération du HTML/JS de la bannière conforme CNIL
+SCRIPT_CATALOG liste les scripts tiers connus par catégorie de finalité
+(analytics, marketing, fonctionnel) avec la base légale et la durée de
+conservation de chacun ; ConsentStore enregistre chaque choix avec
+IP/user-agent hachés comme preuve de consentement (l'Art. 7(2) RGPD met
+la charge de la preuve sur le responsable de traitement, pas sur le
+visiteur) et l'expire au bout de 180 jours conformément aux
+recommandations CNIL.
 """
 
 import os
@@ -366,8 +361,7 @@ def generate_banner_js(config: dict = None) -> str:
     blocked_json = json.dumps(list(set(all_blocked_domains)))
 
     return f"""/**
- * 🛡️ Cookie Consent Manager — Bouclier Numérique Jour 14
- * Conforme CNIL 2020-091 + RGPD Art. 6(1)(a) + ePrivacy
+ * Cookie Consent Manager — conforme CNIL 2020-091 + RGPD Art. 6(1)(a) + ePrivacy
  * Version bannière : {version}
  *
  * Fonctionnement :
@@ -493,13 +487,13 @@ def generate_banner_js(config: dict = None) -> str:
       s.src = 'https://www.googletagmanager.com/gtag/js?id=GA_ID';
       s.async = true;
       document.head.appendChild(s);
-      console.info('[CookieBot] Analytics injecté ✅');
+      console.info('[CookieBot] Analytics injecté');
     }}
     if (consent.marketing) {{
-      console.info('[CookieBot] Marketing scripts injectés ✅');
+      console.info('[CookieBot] Marketing scripts injectés');
     }}
     if (consent.fonctionnel) {{
-      console.info('[CookieBot] Scripts fonctionnels injectés ✅');
+      console.info('[CookieBot] Scripts fonctionnels injectés');
     }}
     // Dispatch event pour les apps qui écoutent
     window.dispatchEvent(new CustomEvent('consentGranted', {{
@@ -589,7 +583,7 @@ def run_demo():
 
     # ── Simulation de consentements ──
     print(f"  {'─'*60}")
-    print(f"  📊  SIMULATION DE CONSENTEMENTS")
+    print(f"  SIMULATION DE CONSENTEMENTS")
     print(f"  {'─'*60}\n")
 
     store = ConsentStore("/tmp/demo_consents.db")
@@ -608,23 +602,20 @@ def run_demo():
             ip="192.168.1." + token[-1],
             ua="Mozilla/5.0"
         )
-        icons = {
-            "analytique":  "📈" if choices["analytique"]  else "🚫",
-            "marketing":   "📢" if choices["marketing"]   else "🚫",
-            "fonctionnel": "⚙️"  if choices["fonctionnel"] else "🚫",
-        }
-        print(f"  [{token}]  {label:<32} "
-              f"{icons['analytique']} {icons['marketing']} {icons['fonctionnel']}")
+        choice_str = " / ".join(
+            f"{k}={'oui' if v else 'non'}" for k, v in choices.items()
+        )
+        print(f"  [{token}]  {label:<32} {choice_str}")
 
     # Retrait d'un consentement
     consent = store.is_valid("user_a")
     if consent:
         store.withdraw(consent["id"])
-        print(f"\n  ↩️  [user_a] Retrait du consentement — Art. 7(3) RGPD")
+        print(f"\n  [user_a] Retrait du consentement — Art. 7(3) RGPD")
 
     # ── Stats ──
     print(f"\n  {'─'*60}")
-    print(f"  📊  TAUX DE CONSENTEMENT (tableau de bord DPO)")
+    print(f"  TAUX DE CONSENTEMENT (tableau de bord DPO)")
     print(f"  {'─'*60}\n")
 
     stats = store.get_stats()
@@ -633,15 +624,12 @@ def run_demo():
     print(f"  Retirés             : {stats['withdrawn']}")
     print(f"\n  Taux d'acceptation par catégorie :")
     for cat, rate in stats["rates"].items():
-        bar  = "█" * (rate // 5) + "░" * (20 - rate // 5)
-        label = {"analytique": "📈 Analytique ",
-                  "marketing":  "📢 Marketing  ",
-                  "fonctionnel":"⚙️  Fonctionnel"}.get(cat, cat)
-        print(f"    {label}  [{bar}] {rate}%")
+        bar = "█" * (rate // 5) + "░" * (20 - rate // 5)
+        print(f"    {cat:<12}  [{bar}] {rate}%")
 
     # ── Scripts bloqués ──
     print(f"\n  {'─'*60}")
-    print(f"  🚫  SCRIPTS BLOQUÉS AVANT CONSENTEMENT")
+    print(f"  SCRIPTS BLOQUÉS AVANT CONSENTEMENT")
     print(f"  {'─'*60}\n")
 
     for cat, cat_data in SCRIPT_CATALOG.items():
@@ -650,14 +638,14 @@ def run_demo():
         cat_label = cat_data["label"]
         for sid, script in cat_data["scripts"].items():
             domains = script.get("domains_blocked", [])
-            status  = "🔴 BLOQUÉ" if script["blocked_by_default"] else "🟢 Exempté"
-            print(f"  {status}  {script['name']:<30} {script['country']}")
+            status  = "BLOQUÉ" if script["blocked_by_default"] else "Exempté"
+            print(f"  {status:<8}  {script['name']:<30} {script['country']}")
             for d in domains:
-                print(f"           ↳ {d}")
+                print(f"            -> {d}")
 
     # ── Génération JS ──
     print(f"\n  {'─'*60}")
-    print(f"  📄  CODE JS GÉNÉRÉ (extrait)")
+    print(f"  CODE JS GÉNÉRÉ (extrait)")
     print(f"  {'─'*60}\n")
 
     js = generate_banner_js({"site_name": "MonSite", "version": "1.0"})
@@ -668,22 +656,22 @@ def run_demo():
 
     # ── Bilan légal ──
     print(f"\n{SEP}")
-    print(f"  ⚖️   CONFORMITÉ CNIL 2020-091")
+    print(f"  CONFORMITÉ CNIL 2020-091")
     print(f"{SEP}\n")
     print(
-        "  ✅  Consentement libre   : boutons Accepter = Refuser\n"
-        "  ✅  Spécifique          : case par catégorie\n"
-        "  ✅  Éclairé             : description + durée + fournisseur\n"
-        "  ✅  Univoque            : action positive requise\n"
-        "  ✅  Retrait facile      : bouton 'Gérer mes cookies' permanent\n"
-        "  ✅  Preuve conservée    : DB avec hash IP + user-agent\n"
-        "  ✅  Durée limitée       : expiration 180 jours (renouvellement)\n"
-        "  ✅  Blocage préventif   : XHR + fetch + createElement interceptés\n"
+        "  Consentement libre   : boutons Accepter = Refuser\n"
+        "  Spécifique           : case par catégorie\n"
+        "  Éclairé              : description + durée + fournisseur\n"
+        "  Univoque             : action positive requise\n"
+        "  Retrait facile       : bouton 'Gérer mes cookies' permanent\n"
+        "  Preuve conservée     : DB avec hash IP + user-agent\n"
+        "  Durée limitée        : expiration 180 jours (renouvellement)\n"
+        "  Blocage préventif    : XHR + fetch + createElement interceptés\n"
         "\n"
         "  Amendes CNIL évitées :\n"
-        "  Google (2022) → 150M€ — bouton Refuser trop caché\n"
-        "  Facebook (2022) → 60M€ — même violation\n"
-        "  Amazon (2021)  → 35M€ — dépôt sans consentement\n"
+        "  Google (2022)   -> 150M€ — bouton Refuser trop caché\n"
+        "  Facebook (2022) -> 60M€ — même violation\n"
+        "  Amazon (2021)   -> 35M€ — dépôt sans consentement\n"
         "\n"
         "  Ouvrir cookie_consent_demo.html dans un navigateur\n"
         "  pour voir la bannière interactive complète.\n"
@@ -716,7 +704,7 @@ def main():
             "version":   args.version,
         })
         Path(args.output).write_text(js, encoding="utf-8")
-        print(f"\n  ✅  Généré : {args.output}  ({len(js.splitlines())} lignes)\n")
+        print(f"\n  Généré : {args.output}  ({len(js.splitlines())} lignes)\n")
 
 
 if __name__ == "__main__":

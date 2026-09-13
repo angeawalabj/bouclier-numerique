@@ -1,37 +1,31 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 13 : DATA MASKING EN TEMPS RÉEL  ║
-║  Objectif : Masquage dynamique selon le rôle de l'appelant       ║
-║  Données  : CB · IBAN · Email · Téléphone · INSEE · Nom · IP     ║
-║  Modèle   : RBAC (Role-Based Access Control) + audit trail       ║
-╚══════════════════════════════════════════════════════════════════╝
+Masquage de données par rôle pour des enregistrements contenant des
+numéros de carte, IBAN, identifiants nationaux et autres champs
+sensibles.
 
-Problème concret :
-  Le support client voit les données d'un client pour l'aider.
-  Mais il n'a pas besoin de voir le numéro CB complet.
-  Le service paiement, lui, en a besoin pour débiter.
-  Un auditeur externe ne doit voir que des données masquées.
+Le même enregistrement client est lu par des personnes différentes pour
+des raisons différentes : un agent support a besoin d'assez du numéro de
+carte pour confirmer qu'il regarde le bon paiement, pas le PAN complet ;
+la facturation a besoin de l'IBAN complet pour émettre un remboursement ;
+un auditeur externe n'a besoin ni de l'un ni de l'autre. Plutôt que de
+maintenir des chemins de lecture séparés par consommateur, ce module
+prend l'enregistrement tel quel et le réécrit par (champ, rôle) selon
+MASKING_RULES, pour que la logique de masquage vive à un seul endroit au
+lieu d'être réimplémentée (ou oubliée) à chaque point d'appel. Ça
+fonctionne de la même façon sur un dict, sur du texte libre comme des
+lignes de log, ou en transparent devant une requête SQLite.
 
-  Sans masquage : 1 accès à la base = accès à TOUT.
-  Avec masquage : chaque rôle voit exactement ce qu'il lui faut.
+Chaque accès à un champ qui n'est pas une divulgation complète est
+journalisé dans un log d'audit SQLite — PCI-DSS 3.4 et les Art. 25/32
+RGPD ne demandent pas juste que le masquage existe, un auditeur demandera
+de produire la preuve de qui a vu quel champ et quand, ce à quoi sert
+get_access_stats().
 
-Modèle RBAC (4 niveaux) :
-  ADMIN     → Données complètes (audit loggé)
-  PAIEMENT  → CB complète + IBAN complet (service facturation)
-  SUPPORT   → 4589 **** **** 1234 · iban****1234 · email masqué
-  EXTERNE   → Tout masqué (auditeurs, régulateurs, partenaires)
-
-Conformité :
-  Art. 25 RGPD — Privacy by Design & by Default
-  Art. 32 RGPD — Mesures techniques de protection
-  PCI-DSS 3.4  — Masquage des PAN (Primary Account Numbers)
-  ISO 27001 A.9.4.1 — Restriction d'accès à l'information
-
-Risque évité :
-  Une fuite de CB via un accès support expose l'entreprise
-  à PCI-DSS Level 1 (audit forcé + amendes ~500K$/an)
-  + Art. 83 §4 RGPD (10M€ ou 2% CA).
+Rôles, du plus large au plus restreint : ADMIN (données complètes),
+PAIEMENT (facturation — a besoin de la carte/IBAN complets pour traiter
+les paiements), SUPPORT (partiel : 4 derniers chiffres, initiales),
+EXTERNE (auditeurs/partenaires — masqué ou haché uniquement).
 """
 
 import re
@@ -479,7 +473,7 @@ def run_demo():
 
         # ── Étape 1 : Masquage par rôle ──
         print(f"  {'─'*60}")
-        print(f"  👁️   ÉTAPE 1 : MÊME DONNÉE — 4 RÔLES DIFFÉRENTS")
+        print(f"  ÉTAPE 1 : MÊME DONNÉE — 4 RÔLES DIFFÉRENTS")
         print(f"  {'─'*60}\n")
 
         roles_desc = {
@@ -507,7 +501,7 @@ def run_demo():
 
         # ── Étape 2 : Objets imbriqués ──
         print(f"  {'─'*60}")
-        print(f"  📦  ÉTAPE 2 : OBJETS IMBRIQUÉS (historique)")
+        print(f"  ÉTAPE 2 : OBJETS IMBRIQUÉS (historique)")
         print(f"  {'─'*60}\n")
 
         for role in [Role.PAIEMENT, Role.SUPPORT]:
@@ -525,7 +519,7 @@ def run_demo():
 
         # ── Étape 3 : Masquage de texte libre ──
         print(f"  {'─'*60}")
-        print(f"  📋  ÉTAPE 3 : MASQUAGE DE LOGS / TEXTE LIBRE")
+        print(f"  ÉTAPE 3 : MASQUAGE DE LOGS / TEXTE LIBRE")
         print(f"  {'─'*60}\n")
 
         print(f"  Original :")
@@ -540,7 +534,7 @@ def run_demo():
 
         # ── Étape 4 : Proxy DB transparent ──
         print(f"  {'─'*60}")
-        print(f"  🗄️   ÉTAPE 4 : PROXY BASE DE DONNÉES TRANSPARENT")
+        print(f"  ÉTAPE 4 : PROXY BASE DE DONNÉES TRANSPARENT")
         print(f"  {'─'*60}\n")
 
         # Créer une mini DB de démo
@@ -579,16 +573,14 @@ def run_demo():
 
         # ── Étape 5 : Audit trail ──
         print(f"  {'─'*60}")
-        print(f"  📊  ÉTAPE 5 : AUDIT TRAIL DES ACCÈS")
+        print(f"  ÉTAPE 5 : AUDIT TRAIL DES ACCÈS")
         print(f"  {'─'*60}\n")
 
         stats = masker.get_access_stats()
         print(f"  Accès enregistrés par rôle :")
         for role, count in stats["by_role"].items():
-            bar  = "█" * count
-            icon = {"ADMIN": "🔴", "PAIEMENT": "🟠",
-                    "SUPPORT": "🟡", "EXTERNE": "🔵"}.get(role, "⚪")
-            print(f"    {icon} {role:<10} {bar} ({count})")
+            bar = "█" * count
+            print(f"    {role:<10} {bar} ({count})")
 
         print(f"\n  Derniers accès :")
         print(f"  {'─'*55}")
@@ -603,7 +595,7 @@ def run_demo():
 
         # ── Bilan ──
         print(f"\n{SEP}")
-        print(f"  📋  BILAN CONFORMITÉ")
+        print(f"  BILAN CONFORMITÉ")
         print(f"{SEP}\n")
         print(
             "  Masquage appliqué par type :\n\n"
@@ -618,11 +610,11 @@ def run_demo():
             "  IP           192.168.1.x            ********\n"
             "\n"
             "  Conformité couverte :\n"
-            "  ✅  Art. 25 RGPD — Privacy by Design & by Default\n"
-            "  ✅  Art. 32 RGPD — Mesures techniques appropriées\n"
-            "  ✅  PCI-DSS 3.4  — Masquage PAN (CB) obligatoire\n"
-            "  ✅  ISO 27001 A.9.4.1 — Contrôle d'accès aux données\n"
-            "  ✅  Audit trail  — Chaque accès journalisé\n"
+            "  Art. 25 RGPD — Privacy by Design & by Default\n"
+            "  Art. 32 RGPD — Mesures techniques appropriées\n"
+            "  PCI-DSS 3.4  — Masquage PAN (CB) obligatoire\n"
+            "  ISO 27001 A.9.4.1 — Contrôle d'accès aux données\n"
+            "  Audit trail  — Chaque accès journalisé\n"
             "\n"
             "  Intégration production (2 lignes) :\n"
             "  masker = DataMasker()\n"

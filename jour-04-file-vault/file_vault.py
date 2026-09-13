@@ -1,34 +1,22 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 4 : LE CHIFFREUR DE FICHIERS     ║
-║  Algo   : AES-256-GCM (Authenticated Encryption)                 ║
-║  KDF    : PBKDF2-HMAC-SHA256 — 600 000 itérations (NIST 2023)   ║
-║  Format : .vault (header + nonce + tag + ciphertext)             ║
-╚══════════════════════════════════════════════════════════════════╝
+Chiffrer des fichiers au repos avec AES-256-GCM pour qu'un ordinateur volé
+ou une sauvegarde qui fuite ne livre pas le contenu en clair avec.
 
-Exigence légale : Art. 32 RGPD — "le chiffrement des données
-à caractère personnel" est cité explicitement comme mesure
-technique appropriée. Art. 34 : en cas de fuite, si les données
-sont chiffrées, la notification aux personnes N'EST PAS requise.
-
-Problème : Des documents sensibles (fiches de paie, contrats,
-scans de pièces d'identité, données médicales) stockés en clair
-sur un disque sont accessibles à quiconque y a accès physique ou
-logiciel — vol, ransomware, technicien de maintenance, etc.
-
-Solution technique :
-  • AES-256-GCM : chiffrement + authentification en un seul algo
-    → Garantit que le fichier n'a pas été falsifié (intégrité)
-  • Clé dérivée depuis un mot de passe via PBKDF2 (600k tours)
-    → Résistant aux attaques par dictionnaire/GPU
-  • Nonce (IV) unique par chiffrement (12 octets, aléatoire)
-    → Deux chiffrements du même fichier donnent deux résultats
-    différents — aucune fuite d'information sur le contenu
-
-Risque évité : En cas de vol d'ordinateur portable ou de fuite
-de backup, les fichiers restent illisibles sans le mot de passe.
-Art. 34 §3(a) : exemption de notification si chiffrement fort.
+AES-GCM a été choisi plutôt qu'un simple AES-CBC parce qu'il est
+authentifié : la même passe qui chiffre les données produit aussi un tag
+qui prouve que le texte chiffré n'a pas été altéré ensuite — un seul
+algorithme couvre donc à la fois la confidentialité et l'intégrité, au
+lieu de greffer un HMAC sur un mode qui n'a lui-même aucun moyen de
+détecter une altération. La clé n'est jamais le mot de passe lui-même :
+elle est dérivée via PBKDF2-HMAC-SHA256 à 600 000 itérations (le plancher
+2023 de NIST SP 800-132), ce qui transforme un hachage de moins d'une
+microseconde en environ 300ms de calcul par tentative, et fait chuter une
+attaque hors ligne sur GPU de plusieurs milliards de tentatives par
+seconde à quelques milliers. L'Art. 32 RGPD cite le chiffrement comme
+mesure technique appropriée, et l'Art. 34(3)(a) dispense de notification
+de violation lorsque les données exposées étaient chiffrées de cette
+façon.
 """
 
 import os
@@ -80,9 +68,9 @@ def derive_key(password: str, salt: bytes) -> bytes:
     Dérive une clé AES-256 depuis un mot de passe via PBKDF2-HMAC-SHA256.
 
     Pourquoi PBKDF2 et pas SHA-256 direct ?
-    SHA-256("password") prend 1 microseconde → GPU peut tester
+    SHA-256("password") prend 1 microseconde → un GPU peut tester
     10 milliards de mots de passe par seconde.
-    PBKDF2 à 600 000 tours prend ~300ms → GPU réduit à ~3 000/sec.
+    PBKDF2 à 600 000 tours prend ~300ms → un GPU tombe à ~3 000/sec.
     """
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -117,7 +105,7 @@ def encrypt_file(input_path: Path, output_path: Path, password: str) -> dict:
     nonce = os.urandom(NONCE_SIZE)
 
     # Dériver la clé AES-256
-    print("  ⏳  Dérivation de la clé (PBKDF2, 600 000 tours)...")
+    print("  Dérivation de la clé (PBKDF2, 600 000 tours)...")
     key = derive_key(password, salt)
 
     # Chiffrer avec AES-256-GCM
@@ -149,7 +137,7 @@ def encrypt_file(input_path: Path, output_path: Path, password: str) -> dict:
         f.write(nonce)
         f.write(ciphertext)
 
-    # Effacement sécurisé du mot de passe de la mémoire (best effort)
+    # Effacement du mot de passe de la mémoire (best effort)
     key = b"\x00" * AES_KEY_SIZE
 
     encrypted_size = output_path.stat().st_size
@@ -172,7 +160,7 @@ def decrypt_file(vault_path: Path, output_path: Path, password: str) -> dict:
     Déchiffre un fichier .vault et vérifie son intégrité.
 
     Si le fichier a été altéré (même 1 bit), AES-GCM lève une
-    InvalidTag exception → Détection de falsification garantie.
+    InvalidTag exception → détection de falsification garantie.
     """
     from cryptography.exceptions import InvalidTag
 
@@ -198,7 +186,7 @@ def decrypt_file(vault_path: Path, output_path: Path, password: str) -> dict:
 
     # Dériver la clé avec les paramètres du header
     iters = header.get("kdf_iterations", PBKDF2_ITERS)
-    print(f"  ⏳  Dérivation de la clé (PBKDF2, {iters:,} tours)...")
+    print(f"  Dérivation de la clé (PBKDF2, {iters:,} tours)...")
 
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -214,7 +202,7 @@ def decrypt_file(vault_path: Path, output_path: Path, password: str) -> dict:
         plaintext = aesgcm.decrypt(nonce, ciphertext, header_json)
     except InvalidTag:
         raise ValueError(
-            "❌ ÉCHEC D'AUTHENTIFICATION — Mot de passe incorrect "
+            "Échec d'authentification — mot de passe incorrect "
             "ou fichier falsifié/corrompu."
         )
 
@@ -228,7 +216,7 @@ def decrypt_file(vault_path: Path, output_path: Path, password: str) -> dict:
         "original_name":   header.get("original_name"),
         "original_size_b": header.get("original_size"),
         "encrypted_at":    header.get("encrypted_at"),
-        "integrity":       "✅ Vérifié (GCM tag valide)",
+        "integrity":       "Vérifié (GCM tag valide)",
     }
 
 
@@ -280,19 +268,19 @@ def encrypt_folder(folder: Path, password: str, wipe_originals: bool = False) ->
     files = [f for f in folder.rglob("*")
              if f.is_file() and f.suffix != VAULT_EXT]
 
-    print(f"  📂  {len(files)} fichier(s) à chiffrer dans {folder}")
+    print(f"  {len(files)} fichier(s) à chiffrer dans {folder}")
 
     for fpath in files:
         out = fpath.with_suffix(fpath.suffix + VAULT_EXT)
         try:
             r = encrypt_file(fpath, out, password)
-            status = "✅"
+            status = "OK"
             if wipe_originals:
                 secure_wipe(fpath)
-                status = "✅🗑️"
+                status = "OK (wiped)"
             results.append({"file": fpath.name, "status": status, **r})
         except Exception as e:
-            results.append({"file": fpath.name, "status": "❌", "error": str(e)})
+            results.append({"file": fpath.name, "status": "ERROR", "error": str(e)})
 
     return results
 
@@ -304,7 +292,7 @@ def run_demo():
     import tempfile
 
     print(f"\n{'═'*62}")
-    print("  🎬  DÉMO AES-256-GCM — Chiffrement de fichiers")
+    print("  DÉMO AES-256-GCM — Chiffrement de fichiers")
     print(f"{'═'*62}\n")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -338,14 +326,14 @@ def run_demo():
         for fname, content in sensitive_files.items():
             (tmp / fname).write_text(content, encoding="utf-8")
 
-        print(f"  📄  Fichiers sensibles créés :")
+        print(f"  Fichiers sensibles créés :")
         for fname in sensitive_files:
             size = (tmp / fname).stat().st_size
-            print(f"     • {fname} ({size} octets — EN CLAIR ⚠️)")
+            print(f"     • {fname} ({size} octets — en clair)")
 
         # ── Étape 1 : Chiffrement ──
         print(f"\n{'─'*62}")
-        print(f"  🔒  ÉTAPE 1 : CHIFFREMENT")
+        print(f"  ÉTAPE 1 : CHIFFREMENT")
         print(f"{'─'*62}")
         print(f"  Mot de passe : {password}")
         print(f"  Algorithme   : AES-256-GCM")
@@ -358,14 +346,14 @@ def run_demo():
             r = encrypt_file(src, dst, password)
             vault_files.append(dst)
             ratio = r['encrypted_size_b'] / r['original_size_b']
-            print(f"  ✅  {fname}")
+            print(f"  {fname}")
             print(f"     → {fname}{VAULT_EXT}")
             print(f"     Taille : {r['original_size_b']} B → {r['encrypted_size_b']} B "
                   f"(×{ratio:.1f}, overhead = header+salt+nonce+tag)")
 
         # ── Étape 2 : Inspection sans clé ──
         print(f"\n{'─'*62}")
-        print(f"  🔍  ÉTAPE 2 : INSPECTION VAULT (sans mot de passe)")
+        print(f"  ÉTAPE 2 : INSPECTION VAULT (sans mot de passe)")
         print(f"{'─'*62}")
         info = inspect_vault(vault_files[0])
         print(f"  Ce qu'un attaquant peut voir sans la clé :")
@@ -374,14 +362,14 @@ def run_demo():
         print(f"    Nom original  : {info['original_name']}  ← visible (metadata)")
         print(f"    Date création : {info['encrypted_at']}")
         print(f"    Algorithme    : {info['algorithm']}")
-        print(f"    Contenu       : [ILLISIBLE — clé requise]")
-        print(f"\n  ℹ️  Note : Pour cacher aussi le nom du fichier, chiffrer")
+        print(f"    Contenu       : illisible — clé requise")
+        print(f"\n  Note : pour cacher aussi le nom du fichier, chiffrer")
         print(f"  dans un container (ex: VeraCrypt) ou nommer le vault")
         print(f"  avec un identifiant opaque (UUID).")
 
         # ── Étape 3 : Déchiffrement ──
         print(f"\n{'─'*62}")
-        print(f"  🔓  ÉTAPE 3 : DÉCHIFFREMENT")
+        print(f"  ÉTAPE 3 : DÉCHIFFREMENT")
         print(f"{'─'*62}")
         vault = vault_files[0]
         out = tmp / "DECRYPTED_fiche_paie.txt"
@@ -395,11 +383,11 @@ def run_demo():
 
         # ── Étape 4 : Mauvais mot de passe ──
         print(f"\n{'─'*62}")
-        print(f"  🔐  ÉTAPE 4 : TENTATIVE AVEC MAUVAIS MOT DE PASSE")
+        print(f"  ÉTAPE 4 : TENTATIVE AVEC MAUVAIS MOT DE PASSE")
         print(f"{'─'*62}")
         try:
             decrypt_file(vault, tmp / "fail.txt", "mauvais_mdp")
-            print("  ⚠️  Déchiffrement inattendu !")
+            print("  Déchiffrement inattendu !")
         except ValueError as e:
             print(f"  {e}")
             print(f"  → AES-GCM a détecté que la clé est incorrecte.")
@@ -407,7 +395,7 @@ def run_demo():
 
         # ── Étape 5 : Détection de falsification ──
         print(f"\n{'─'*62}")
-        print(f"  ⚠️  ÉTAPE 5 : DÉTECTION DE FALSIFICATION (Tamper Detection)")
+        print(f"  ÉTAPE 5 : DÉTECTION DE FALSIFICATION (tamper detection)")
         print(f"{'─'*62}")
         tampered = tmp / "tampered.vault"
         shutil.copy(vault, tampered)
@@ -422,7 +410,7 @@ def run_demo():
         print(f"  Simulation : 1 octet modifié dans le ciphertext...")
         try:
             decrypt_file(tampered, tmp / "tampered_out.txt", password)
-            print("  ⚠️  Falsification non détectée !")
+            print("  Falsification non détectée !")
         except ValueError as e:
             print(f"  {e}")
             print(f"  → GCM Tag mismatch : toute modification est détectée,")
@@ -430,22 +418,21 @@ def run_demo():
 
         # ── Bilan ──
         print(f"\n{'═'*62}")
-        print(f"  📊  BILAN DE SÉCURITÉ")
+        print(f"  BILAN DE SÉCURITÉ")
         print(f"{'═'*62}")
         print(f"""
   Fichiers chiffrés  : {len(vault_files)}
   Algorithme         : AES-256-GCM (FIPS 140-2 approved)
-  Confidentialité    : ✅ Clé 256 bits, infaisable à brute-forcer
-  Intégrité          : ✅ GCM Tag — toute altération détectée
-  Authentification   : ✅ Lié au mot de passe via PBKDF2
-  Résistance GPU     : ✅ PBKDF2 600k tours ≈ 300ms par tentative
+  Confidentialité    : clé 256 bits, infaisable à brute-forcer
+  Intégrité          : GCM Tag — toute altération détectée
+  Authentification   : liée au mot de passe via PBKDF2
+  Résistance GPU     : PBKDF2 600k tours ≈ 300ms par tentative
 
-  🔑  CONSEIL RGPD (Art. 32 + 34) :
+  Conseil RGPD (Art. 32 + 34) :
   Chiffrer les documents sensibles avec ce script vous donne
   droit à l'exemption de notification en cas de fuite :
   Art. 34 §3(a) — si données chiffrées avec mesures appropriées,
-  la notification aux personnes concernées N'EST PAS obligatoire.
-  Économie potentielle : réputation + amendes + frais légaux.
+  la notification aux personnes concernées n'est pas obligatoire.
 """)
 
 
@@ -462,7 +449,6 @@ Usage :
 """
 
 def main():
-    print(__doc__)
     args = sys.argv[1:]
 
     if not args or args[0] == "demo":
@@ -479,9 +465,9 @@ def main():
         pwd = getpass.getpass("  Mot de passe : ")
         pwd2 = getpass.getpass("  Confirmer   : ")
         if pwd != pwd2:
-            print("  ❌  Mots de passe différents."); sys.exit(1)
+            print("  Mots de passe différents."); sys.exit(1)
         r = encrypt_file(src, dst, pwd)
-        print(f"\n  ✅  Chiffré : {r['output']}")
+        print(f"\n  Chiffré : {r['output']}")
         print(f"  Taille : {r['original_size_b']} → {r['encrypted_size_b']} octets")
 
     elif cmd == "decrypt":
@@ -493,7 +479,7 @@ def main():
         pwd = getpass.getpass("  Mot de passe : ")
         try:
             r = decrypt_file(vault, dst, pwd)
-            print(f"\n  ✅  Déchiffré : {r['output']}")
+            print(f"\n  Déchiffré : {r['output']}")
             print(f"  Intégrité   : {r['integrity']}")
         except ValueError as e:
             print(f"\n  {e}"); sys.exit(1)
@@ -502,7 +488,7 @@ def main():
         if len(args) < 2:
             print(USAGE); sys.exit(1)
         info = inspect_vault(Path(args[1]))
-        print(f"\n  📋  Métadonnées vault :")
+        print(f"\n  Métadonnées vault :")
         for k, v in info.items():
             print(f"  {k:<20} : {v}")
 
@@ -510,10 +496,10 @@ def main():
         if len(args) < 2:
             print(USAGE); sys.exit(1)
         target = Path(args[1])
-        confirm = input(f"  ⚠️  Effacer définitivement '{target}' ? (oui/N) : ")
+        confirm = input(f"  Effacer définitivement '{target}' ? (oui/N) : ")
         if confirm.lower() == "oui":
             secure_wipe(target)
-            print(f"  🗑️  Effacé (3 passes).")
+            print(f"  Effacé (3 passes).")
         else:
             print("  Annulé.")
 
@@ -523,11 +509,11 @@ def main():
         pwd = getpass.getpass("  Mot de passe : ")
         pwd2 = getpass.getpass("  Confirmer   : ")
         if pwd != pwd2:
-            print("  ❌  Mots de passe différents."); sys.exit(1)
+            print("  Mots de passe différents."); sys.exit(1)
         wipe = "--wipe" in args
         results = encrypt_folder(Path(args[1]), pwd, wipe)
-        ok = sum(1 for r in results if r["status"].startswith("✅"))
-        print(f"\n  ✅  {ok}/{len(results)} fichiers chiffrés")
+        ok = sum(1 for r in results if r["status"].startswith("OK"))
+        print(f"\n  {ok}/{len(results)} fichiers chiffrés")
 
     else:
         print(USAGE)
