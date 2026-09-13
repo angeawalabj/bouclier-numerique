@@ -1,27 +1,26 @@
-# ═══════════════════════════════════════════════════════════════
-# 🛡️ Le Bouclier Numérique — Dépendances
-# Python 3.10+ requis
-# ═══════════════════════════════════════════════════════════════
+# Le Bouclier Numérique — dépendances (Python 3.10+)
+#
+# Ce fichier reflète les imports réels des scripts, pas une liste
+# aspirationnelle : plusieurs outils annoncés (HIBP, CVE, OSINT, feeds
+# de threat intel) utilisent volontairement urllib de la stdlib plutôt
+# que requests/aiohttp, pour rester utilisables sans dépendance réseau
+# supplémentaire.
 
 # ── Cryptographie ──────────────────────────────────────────────
-cryptography>=42.0.0       # AES-256-GCM, X25519, HKDF (J04, J18)
-bcrypt>=4.1.0              # Hachage mots de passe alternatif (J01)
+cryptography>=42.0.0       # AES-256-GCM, X25519, HKDF (J04 file_vault, J18 e2ee)
+bcrypt>=4.1.0              # Hachage adaptatif pour l'attaque par dictionnaire (J23 hash_cracker)
 
 # ── Images ─────────────────────────────────────────────────────
-Pillow>=10.2.0             # Analyse et nettoyage EXIF (J02)
-
-# ── Réseau ─────────────────────────────────────────────────────
-requests>=2.31.0           # HTTP client (J03, J15)
-aiohttp>=3.9.0             # HTTP async (J07, J21)
+Pillow>=10.2.0             # Lecture/réécriture EXIF (J02 exif_cleaner)
 
 # ── Système ────────────────────────────────────────────────────
-psutil>=5.9.0              # Monitoring processus/ports (J05, J10)
+psutil>=5.9.0              # Processus/ports/connexions (J05, J10, J17)
 
 # ── Web / API ──────────────────────────────────────────────────
-flask>=3.0.0               # Serveur web léger (J06, J07)
+flask>=3.0.0                # Serveurs locaux légers (J06 rate_limiter, J07 honeypot, J21 api_fuzzer, J22 injection_scanner — cibles de démo et endpoints d'audit)
 
 # ── Documents ──────────────────────────────────────────────────
-python-docx>=1.1.0         # Génération fichiers Word (J12, J19)
+python-docx>=1.1.0         # Génération de livrables Word natifs en Python (J19 pca_generator, J25 pentest_report, bonus dpa_generator)
 
 # ── Données ────────────────────────────────────────────────────
 # (sqlite3 : stdlib Python, pas de dépendance externe)

@@ -1,15 +1,7 @@
-# 🏆 Hall of Fame — Chercheurs en Sécurité
+# Hall of Fame — Chercheurs en sécurité
 
-Merci aux personnes qui ont contribué à la sécurité de ce projet en signalant des vulnérabilités de manière responsable, conformément à notre [politique de divulgation](SECURITY.md).
+Ce fichier recensera les personnes qui signalent une vulnérabilité de façon
+responsable, suivant la procédure décrite dans [SECURITY.md](SECURITY.md).
 
----
-
-## 🥇 Contributeurs sécurité
-
-| Date | Chercheur | Vulnérabilité | Sévérité | CVE |
-|------|-----------|--------------|---------|-----|
-| — | — | Aucun signalement à ce jour | — | — |
-
----
-
-*Vous avez trouvé une vulnérabilité ? Consultez [SECURITY.md](SECURITY.md) pour la procédure de signalement responsable.*
+Aucun signalement reçu pour l'instant — la page reste vide en attendant le
+premier, plutôt que remplie de tirets.

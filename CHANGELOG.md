@@ -1,4 +1,4 @@
-# 📅 Changelog — Le Bouclier Numérique
+# Changelog — Le Bouclier Numérique
 
 Toutes les modifications notables de ce projet sont documentées dans ce fichier.  
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) · Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
@@ -44,7 +44,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) · Versioning 
 - **J20** `rssi_dashboard.html` — Dashboard RSSI · score 83/100 · 6 domaines
 
 ### Documentation
-- 20 READMEs individuels par outil (badges, architecture, conformité)
+- 30 READMEs individuels par outil, chacun à côté de son script
 - README master avec tableau 30 jours, conformité, crypto stack
 - LICENSE MIT + avertissement usage offensif
 - CONTRIBUTING.md avec standards code, tests, Conventional Commits
@@ -62,5 +62,5 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) · Versioning 
 - `Corrigé` — corrections de bugs
 - `Sécurité` — corrections de vulnérabilités
 
-[Unreleased]: https://github.com/votre-username/bouclier-numerique/compare/v1.0.0...HEAD
-[v1.0.0]: https://github.com/votre-username/bouclier-numerique/releases/tag/v1.0.0
+[Unreleased]: https://github.com/angeawalabj/bouclier-numerique/compare/v1.0.0...HEAD
+[v1.0.0]: https://github.com/angeawalabj/bouclier-numerique/releases/tag/v1.0.0

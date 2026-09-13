@@ -1,4 +1,4 @@
-# 📜 Code de Conduite — Contributor Covenant v2.1
+# Code de Conduite — Contributor Covenant v2.1
 
 ## Notre engagement
 

@@ -1,4 +1,4 @@
-# 🤝 Guide de Contribution — Le Bouclier Numérique
+# Guide de Contribution — Le Bouclier Numérique
 
 Merci de vouloir contribuer ! Ce guide explique comment participer, qu'il s'agisse de corriger un bug, d'améliorer un outil existant, ou de proposer un nouveau jour de challenge.
 
@@ -111,33 +111,37 @@ Tous les scripts Python doivent respecter :
 
 ```python
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR XX : NOM DE L'OUTIL             ║
-║  Objectif  : Ce que fait l'outil en une ligne                   ║
-║  Conformité: Référentiel légal couvert                          ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Jour XX — Nom de l'outil.
 
-Description étendue : contexte légal, problème résolu, algorithmes utilisés.
+Ce que l'outil fait, pourquoi ce problème mérite un outil (pas juste une
+checklist), et ce que le choix technique principal évite concrètement.
+Pas de formule copiée-collée d'un outil à l'autre : chaque outil a buté
+sur un problème différent, le docstring doit le montrer.
 """
-# ✅ Imports stdlib avant imports tiers
 import os
 import sys
 from pathlib import Path
 
-# ✅ Imports tiers avec try/except et message d'erreur utile
 try:
     from cryptography.hazmat.primitives import hashes
 except ImportError:
-    print("❌ Dépendance manquante : pip install cryptography")
+    print("Dépendance manquante : pip install cryptography", file=sys.stderr)
     sys.exit(1)
 ```
 
 **Règles :**
 - Python 3.10+ minimum (utilisation de `match/case` autorisée)
+- Pas de bannière ASCII, pas d'emoji décoratif sur les `print()` de flux
+  normal (un emoji reste acceptable pour signaler une erreur bloquante,
+  avec parcimonie)
 - Type hints sur toutes les fonctions publiques
-- Docstrings en français sur les fonctions complexes
+- Docstrings en français sur les fonctions complexes, écrites pour
+  expliquer un choix non-évident — pas pour répéter ce que le nom de la
+  fonction dit déjà
 - Zéro warnings `ruff` — configuration dans `pyproject.toml`
+- Une vraie interface `argparse` scriptable (sous-commandes explicites),
+  pas seulement un menu interactif — l'outil doit pouvoir tourner sans
+  humain devant le terminal
 - Chaque script doit avoir un mode `demo` fonctionnel sans paramètres
 - Pas de secrets hardcodés, jamais (clés API, mots de passe...)
 
@@ -185,28 +189,35 @@ jour-XX-nom-de-loutil/
 **Template README minimum :**
 
 ```markdown
-# 🔧 Jour XX — Nom de l'Outil
+# Jour XX — Nom de l'outil
 
-## 🎯 Problème résolu
+## Problème résolu
 <!-- Scénario concret d'attaque ou de non-conformité que cet outil résout -->
 
-## ⚡ Usage
-<!-- Commandes prêtes à copier-coller -->
+## Usage
+<!-- Le mode demo pour découvrir l'outil, ET les commandes réelles pour
+     s'en servir sur un vrai système/dépôt/annuaire -->
 
-## 🔬 Architecture
+## Architecture
 <!-- Comment ça fonctionne, pourquoi ces choix techniques -->
 
-## ⚖️ Conformité
+## Limites connues
+<!-- Ce que l'outil ne fait pas (encore), pour ne pas laisser croire le contraire -->
+
+## Conformité
 <!-- Référentiels couverts : RGPD, ISO 27001, ANSSI, PCI-DSS, NIS2 -->
 ```
 
 **Critères d'acceptation :**
-- ✅ L'outil résout un vrai problème de sécurité (pas un doublon)
-- ✅ Mode `demo` fonctionnel sans configuration
-- ✅ Conformité à au moins un référentiel documentée
-- ✅ Tests passants
-- ✅ Pas de dépendances inutiles (préférer stdlib)
-- ✅ Usage légal uniquement, avertissement inclus si offensif
+- L'outil résout un vrai problème de sécurité (pas un doublon)
+- Mode `demo` fonctionnel sans configuration, ET un usage réel documenté
+  au-delà de la démo
+- Conformité à au moins un référentiel documentée
+- Tests passants
+- Pas de dépendances inutiles (préférer stdlib)
+- Usage légal uniquement, avertissement inclus si offensif
+- Aucune donnée fabriquée présentée comme un résultat réel (score, scan,
+  enrichissement...) — si une valeur est simulée, le dire explicitement
 
 ---
 

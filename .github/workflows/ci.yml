@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: pip install ruff mypy
+      - run: pip install ruff
       - name: Ruff — style et erreurs
         run: ruff check . --output-format=github
       - name: Ruff — formatage
@@ -65,14 +65,15 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - name: Tester tous les modes démo
+      - name: Tester les modes démo
         run: |
-          python3 password_vault.py demo
-          python3 exif_cleaner.py demo
-          python3 leak_detector.py demo
-          python3 file_vault.py demo
-          python3 port_scanner.py demo
-          python3 honeypot.py demo
-          python3 log_anonymizer.py demo
-          python3 registre_traitements.py demo
-          echo "✅ Tous les modes démo fonctionnels"
+          python3 jour-01-password-vault/password_vault.py demo
+          python3 jour-02-exif-cleaner/exif_cleaner.py demo
+          python3 jour-03-leak-detector/leak_detector.py demo
+          python3 jour-04-file-vault/file_vault.py demo
+          python3 jour-10-port-scanner/port_scanner.py demo
+          python3 jour-07-honeypot/honeypot.py demo
+          python3 jour-09-log-anonymizer/log_anonymizer.py demo
+          python3 jour-12-treatment-registry/registre_traitements.py demo
+          python3 jour-29-threat-intel/threat_intel.py demo
+          echo "Modes démo testés OK"

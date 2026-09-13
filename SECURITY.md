@@ -1,4 +1,4 @@
-# 🔐 Politique de Sécurité — Le Bouclier Numérique
+# Politique de Sécurité — Le Bouclier Numérique
 
 ## Versions supportées
 
@@ -20,10 +20,10 @@
 
 **1. Nous contacter en privé**
 
-Envoyez un rapport par l'un de ces canaux (par ordre de préférence) :
-
-- **GitHub Security Advisory** : [Onglet Security > Advisories > New draft advisory](../../security/advisories/new)
-- **Email PGP** : `security@bouclier-numerique.dev` — clé publique disponible sur [keys.openpgp.org](https://keys.openpgp.org)
+Ce projet est maintenu par une seule personne, sur son temps libre. Un canal
+unique, mais fiable : **GitHub Security Advisory** — [Onglet Security >
+Advisories > New draft advisory](../../security/advisories/new). Ça notifie
+directement le mainteneur sans passer par une Issue publique.
 
 **2. Inclure dans votre rapport**
 
@@ -40,22 +40,18 @@ Correctif      : Suggestion si vous en avez une (optionnel)
 
 **3. Délais de réponse**
 
-| Action | Délai |
-|--------|-------|
-| Accusé de réception | 48 heures ouvrées |
-| Évaluation initiale | 5 jours ouvrés |
-| Correctif (critique) | 7 jours |
-| Correctif (élevée) | 14 jours |
-| Correctif (modérée) | 30 jours |
-| Publication CVE (si applicable) | Après le correctif |
+Projet solo, pas d'équipe de sécurité dédiée : traitement en best-effort, pas
+de SLA contractuel. En pratique, viser un accusé de réception sous une
+semaine et un correctif rapide pour tout ce qui est critique — mais c'est un
+engagement moral, pas une garantie chiffrée.
 
 ---
 
 ## Programme de reconnaissance
 
-Nous remercions publiquement les chercheurs qui nous signalent des vulnérabilités de manière responsable dans le fichier [HALL_OF_FAME.md](HALL_OF_FAME.md) (avec leur accord).
-
-Ce projet n'offre pas de récompense financière (bug bounty), mais une reconnaissance explicite et une mention dans le changelog de la release.
+Les chercheurs qui signalent une vulnérabilité de manière responsable sont
+cités dans [HALL_OF_FAME.md](HALL_OF_FAME.md) (avec leur accord). Pas de
+bug bounty financier — juste une reconnaissance publique honnête.
 
 ---
 
