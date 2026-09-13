@@ -1,36 +1,23 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 26 : ZERO TRUST CONTROLLER     ║
-║  Objectif  : Implémenter les principes Zero Trust              ║
-║  Modèle    : Never Trust, Always Verify · Least Privilege      ║
-║  Features  : mTLS · JWT · RBAC · Device Trust · Audit log     ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Contrôleur d'accès Zero Trust : score de confiance par requête, RBAC hiérarchique, journal d'audit chaîné.
 
-"Never trust, always verify" — Principe fondateur du Zero Trust (ZT)
-Concept introduit par John Kindervag (Forrester) en 2010, adopté
-par NIST SP 800-207 (2020) et mandaté pour les agences US (EO 14028).
+Le modèle périmétrique classique ("château-fossé") suppose qu'une fois
+dans le réseau interne, une requête est de confiance — hypothèse qui
+s'effondre dès qu'un poste interne est compromis ou qu'un télétravailleur
+se connecte depuis un réseau non maîtrisé. Le Zero Trust (NIST SP
+800-207) inverse cette logique : chaque requête est réévaluée
+indépendamment de son origine, réseau interne compris. Techniquement,
+ça se traduit ici par un score de confiance recalculé à chaque appel
+(MFA, certificat mTLS, appareil géré, heure, sensibilité de la
+ressource) plutôt qu'une session validée une fois pour toutes — un
+score intermédiaire déclenche un STEP_UP (authentification renforcée)
+au lieu d'un ALLOW/DENY binaire, ce qui évite de bloquer un utilisateur
+légitime sur un simple facteur dégradé. Le journal d'audit est chaîné
+par HMAC (chaque entrée inclut le hash de la précédente) : une
+modification rétroactive de n'importe quelle ligne casse la chaîne et
+devient détectable, contrairement à un simple fichier de logs.
 
-En opposition au modèle périmétrique traditionnel ("château-fossé"),
-le Zero Trust considère que AUCUN réseau n'est de confiance, même
-le réseau interne. Chaque accès doit être :
-
-  ✅  Identifié    — qui demande ? (utilisateur + device)
-  ✅  Authentifié  — preuve d'identité (MFA, certificat)
-  ✅  Autorisé     — droit explicite sur cette ressource
-  ✅  Chiffré      — même sur réseau interne
-  ✅  Journalisé   — traçabilité complète
-  ✅  Réévalué     — contexte réévalué à chaque requête
-
-Ce contrôleur implémente :
-  • Évaluation de confiance par requête (trust score 0-100)
-  • RBAC avec héritage de rôles
-  • Gestion des sessions avec réévaluation périodique
-  • Device fingerprinting (OS, IP, user-agent)
-  • Politique de moindre privilège vérifiable
-  • Journal d'audit immuable avec signature HMAC
-
-Conformité : NIST SP 800-207 · ANSSI PA-022 · ISO 27001 A.9
+Référence : NIST SP 800-207, ANSSI PA-022, ISO 27001 A.9.
 """
 
 import hashlib
@@ -108,81 +95,81 @@ class TrustEngine:
         # ── Facteur 1 : Authentification (40 points max) ─────────
         if identity:
             if identity.mfa_ok:
-                factors["mfa"]  = ("✅ MFA validé", +25)
+                factors["mfa"]  = ("MFA validé", +25)
                 score += 25
             else:
-                factors["mfa"]  = ("⚠️  MFA absent", +5)
+                factors["mfa"]  = ("MFA absent", +5)
                 score += 5
 
             if identity.cert_ok:
-                factors["cert"] = ("✅ Certificat mTLS valide", +15)
+                factors["cert"] = ("Certificat mTLS valide", +15)
                 score += 15
             else:
-                factors["cert"] = ("ℹ️  Pas de certificat mTLS", 0)
+                factors["cert"] = ("Pas de certificat mTLS", 0)
         else:
-            factors["identity"] = ("❌ Identité non fournie", -50)
+            factors["identity"] = ("Identité non fournie", -50)
             score -= 50
 
         # ── Facteur 2 : Appareil (30 points max) ─────────────────
         if device:
             if device.managed:
-                factors["managed"]   = ("✅ Appareil géré (MDM)", +20)
+                factors["managed"]   = ("Appareil géré (MDM)", +20)
                 score += 20
             else:
-                factors["managed"]   = ("⚠️  Appareil non géré", +5)
+                factors["managed"]   = ("Appareil non géré", +5)
                 score += 5
 
             if device.compliant:
-                factors["compliant"] = ("✅ Appareil conforme", +10)
+                factors["compliant"] = ("Appareil conforme", +10)
                 score += 10
             else:
-                factors["compliant"] = ("⚠️  Non-conformité appareil", 0)
+                factors["compliant"] = ("Non-conformité appareil", 0)
 
             # IP interne vs externe
             ip = device.ip_address
             if ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.16."):
-                factors["network"] = ("ℹ️  Réseau interne (non suffisant en ZT)", +5)
+                factors["network"] = ("Réseau interne (non suffisant en ZT)", +5)
                 score += 5
             else:
-                factors["network"] = ("⚠️  Accès depuis réseau externe", 0)
+                factors["network"] = ("Accès depuis réseau externe", 0)
         else:
-            factors["device"] = ("❌ Contexte appareil inconnu", -20)
+            factors["device"] = ("Contexte appareil inconnu", -20)
             score -= 20
 
         # ── Facteur 3 : Comportement / contexte (30 points max) ──
         hour = datetime.now().hour
         if 8 <= hour <= 19:
-            factors["time"] = ("✅ Horaire de travail", +10)
+            factors["time"] = ("Horaire de travail", +10)
             score += 10
         elif 19 < hour <= 22:
-            factors["time"] = ("⚠️  Horaire inhabituel (soir)", +5)
+            factors["time"] = ("Horaire inhabituel (soir)", +5)
             score += 5
         else:
-            factors["time"] = ("🔴 Horaire suspect (nuit)", 0)
+            factors["time"] = ("Horaire suspect (nuit)", 0)
 
         # Sensibilité de la ressource
         resource_lower = request.resource.lower()
         if any(kw in resource_lower for kw in ("admin", "root", "secret", "key", "backup")):
-            factors["resource_sensitivity"] = ("🔴 Ressource très sensible → score réduit", -10)
+            factors["resource_sensitivity"] = ("Ressource très sensible → score réduit", -10)
             score -= 10
         elif any(kw in resource_lower for kw in ("conf", "config", "priv", "internal")):
-            factors["resource_sensitivity"] = ("⚠️  Ressource sensible", -5)
+            factors["resource_sensitivity"] = ("Ressource sensible", -5)
             score -= 5
         else:
-            factors["resource_sensitivity"] = ("ℹ️  Ressource standard", 0)
+            factors["resource_sensitivity"] = ("Ressource standard", 0)
 
         # Action (write/delete plus risquée que read)
         action_penalty = {"read": 0, "write": -5, "delete": -15, "admin": -20}
         penalty = action_penalty.get(request.action, -10)
         if penalty < 0:
-            factors["action"] = (f"⚠️  Action '{request.action}' à risque élevé", penalty)
+            factors["action"] = (f"Action '{request.action}' à risque élevé", penalty)
             score += penalty
         else:
-            factors["action"] = (f"✅ Action '{request.action}' (lecture seule)", 0)
+            factors["action"] = (f"Action '{request.action}' (lecture seule)", 0)
 
         # Clearance niveau
         if identity:
-            factors["clearance"] = (f"ℹ️  Niveau d'habilitation : {identity.clearance}", 0)
+            factors["clearance"] = (f"Niveau d'habilitation : {identity.clearance}", 0)
 
         score = max(0, min(100, score))
 
@@ -485,10 +472,7 @@ class ZeroTrustController:
 
 def run_demo():
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 26 : ZERO TRUST CONTROLLER     ║
-╚══════════════════════════════════════════════════════════════════╝
-
+  Zero Trust Controller — Jour 26
   "Never Trust, Always Verify" — NIST SP 800-207
 """)
 
@@ -541,8 +525,6 @@ def run_demo():
         ),
     ]
 
-    decision_icons = {"ALLOW": "✅", "DENY": "❌", "STEP_UP": "🔐"}
-
     print(f"  {'─'*62}")
     print(f"  {'Utilisateur':<12} {'Ressource':<28} {'Action':<8} {'Score':>6}  {'Décision'}")
     print(f"  {'─'*62}")
@@ -550,35 +532,34 @@ def run_demo():
     for req in scenarios:
         result = ztc.access(req)
         user   = req.identity.username if req.identity else "anonyme"
-        icon   = decision_icons.get(result["decision"], "?")
         print(f"  {user:<12} {req.resource:<28} {req.action:<8} "
-              f"{result['trust_score']:>5}/100  {icon} {result['decision']}")
+              f"{result['trust_score']:>5}/100  {result['decision']}")
         print(f"  {'':12} → {result['reason'][:60]}")
         print()
 
     # ── Intégrité du journal ─────────────────────────────────────
     integrity = ztc.audit.verify_integrity()
     print(f"  {'─'*62}")
-    print(f"  🔐  Intégrité du journal d'audit : "
-          f"{'✅ OK' if integrity['ok'] else '❌ COMPROMIS'} "
+    print(f"  Intégrité du journal d'audit : "
+          f"{'OK' if integrity['ok'] else 'COMPROMIS'} "
           f"({integrity['entries']} entrées)")
 
     # ── Résumé ───────────────────────────────────────────────────
     s = ztc.summary()
-    print(f"\n  📊  Résumé : {s['total']} requêtes · "
-          f"✅ {s['allowed']} autorisées · "
-          f"❌ {s['denied']} refusées · "
-          f"🔐 {s['step_up']} step-up")
+    print(f"\n  Résumé : {s['total']} requêtes · "
+          f"{s['allowed']} autorisées · "
+          f"{s['denied']} refusées · "
+          f"{s['step_up']} step-up")
 
     print(f"""
   {'─'*62}
   Principes Zero Trust implémentés :
 
-  ✅  Never Trust, Always Verify — chaque requête évaluée
-  ✅  Trust Score composite (MFA + appareil + réseau + heure)
-  ✅  RBAC avec héritage de rôles (moindre privilège)
-  ✅  Journal d'audit HMAC-chaîné (détection altération)
-  ✅  Décision STEP_UP pour score intermédiaire
+  - Never Trust, Always Verify — chaque requête évaluée
+  - Trust Score composite (MFA + appareil + réseau + heure)
+  - RBAC avec héritage de rôles (moindre privilège)
+  - Journal d'audit HMAC-chaîné (détection altération)
+  - Décision STEP_UP pour score intermédiaire
 
   Conformité : NIST SP 800-207 · ISO 27001 A.9 · ANSSI PA-022
   {'─'*62}
@@ -618,8 +599,7 @@ def main():
         action=args.action,
     )
     result = ztc.access(req)
-    icons  = {"ALLOW": "✅", "DENY": "❌", "STEP_UP": "🔐"}
-    print(f"{icons[result['decision']]} {result['decision']} (score: {result['trust_score']}/100)")
+    print(f"{result['decision']} (score: {result['trust_score']}/100)")
     print(f"Raison : {result['reason']}")
 
 

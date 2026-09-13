@@ -1,33 +1,18 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 6 : LE FIREWALL APPLICATIF       ║
-║  Mécanisme : Rate Limiting + IP Blocking (Anti-Brute Force)      ║
-║  Stack     : Flask middleware · SQLite · threading               ║
-║  Stratégies: Progressive delay · Sliding window · IP reputation  ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Ralentit puis bloque les IPs qui accumulent des échecs d'authentification,
+pour qu'une attaque brute force automatisée coûte des heures au lieu de secondes.
 
-Exigence légale : Art. 32 RGPD — "garantir la confidentialité,
-l'intégrité, la disponibilité et la résilience permanentes des
-systèmes et services de traitement."
-
-ISO 27001 — Contrôle A.9.4.2 : "Des procédures d'ouverture de
-session sécurisée doivent être mises en place pour accéder aux
-systèmes et aux applications."
-
-Problème : Une attaque brute force sur un formulaire de connexion
-peut tester des millions de combinaisons mot de passe/login sans
-aucune friction si le serveur ne réagit pas. Les bots modernes
-peuvent effectuer 10 000+ tentatives/minute depuis une seule IP.
-
-Solution technique — 3 couches de défense :
-  1. Rate Limiting   : Max N tentatives par fenêtre glissante
-  2. Progressive Backoff : Délai exponentiel entre les tentatives
-  3. IP Reputation   : Bannissement temporaire après X échecs
-
-Risque évité : Compromission de comptes utilisateurs, credential
-stuffing, password spraying. Coût moyen d'une violation de données
-en France : 4,4M€ (IBM Cost of Data Breach Report 2024).
+Le compteur d'échecs vit à deux endroits : un cache mémoire (rapide, mais
+perdu au redémarrage du process) et une table SQLite (plus lente, mais
+qui survit à un redémarrage et peut être interrogée après coup pour
+l'audit). Le blocage suit trois paliers — avertissement silencieux,
+délai progressif ajouté à la réponse, puis blocage temporaire ou
+bannissement — plutôt qu'un tout-ou-rien, pour ne pas verrouiller un
+utilisateur qui a simplement fait une faute de frappe sur son mot de
+passe. Art. 32 RGPD impose des mesures techniques garantissant la
+disponibilité et la résilience des systèmes de traitement ; ISO 27001
+A.9.4.2 exige des procédures de connexion limitant les tentatives
+répétées.
 """
 
 import sqlite3
@@ -283,7 +268,7 @@ class RateLimiter:
             self._block_ip(ip, cfg.PERMANENT_BAN_SEC, failures, permanent=True)
             self._create_alert(ip, "PERMANENT_BAN",
                                f"{failures} tentatives — bannissement 24h")
-            self.logger.warning(f"🔴 BAN PERMANENT : {ip} ({failures} tentatives)")
+            self.logger.warning(f"BAN PERMANENT : {ip} ({failures} tentatives)")
             return {"allowed": False, "status": "banned", "delay": cfg.PERMANENT_BAN_SEC,
                     "failures": failures, "message": "Accès définitivement refusé"}
 
@@ -291,7 +276,7 @@ class RateLimiter:
             self._block_ip(ip, cfg.BLOCK_DURATION_SEC, failures)
             self._create_alert(ip, "BLOCK",
                                f"{failures} tentatives en {cfg.WINDOW_SECONDS}s")
-            self.logger.warning(f"🟠 BLOCAGE : {ip} ({failures} échecs → {cfg.BLOCK_DURATION_SEC}s)")
+            self.logger.warning(f"BLOCAGE : {ip} ({failures} échecs → {cfg.BLOCK_DURATION_SEC}s)")
             return {"allowed": False, "status": "blocked",
                     "delay": cfg.BLOCK_DURATION_SEC, "failures": failures,
                     "expires": time.time() + cfg.BLOCK_DURATION_SEC,
@@ -309,7 +294,7 @@ class RateLimiter:
             status = "slowdown"
         elif failures >= cfg.WARN_THRESHOLD:
             status = "warn"
-            self.logger.info(f"🟡 AVERTISSEMENT : {ip} — {failures} échecs sur {endpoint}")
+            self.logger.info(f"AVERTISSEMENT : {ip} — {failures} échecs sur {endpoint}")
         else:
             status = "ok"
 
@@ -401,7 +386,7 @@ class RateLimiter:
     def unblock_ip(self, ip: str):
         """Débloque manuellement une IP (pour l'admin)."""
         self._remove_block(ip)
-        self.logger.info(f"✅ IP débloquée manuellement : {ip}")
+        self.logger.info(f"IP débloquée manuellement : {ip}")
 
 
 # ─── Décorateur Flask ─────────────────────────────────────────────
@@ -446,7 +431,7 @@ def rate_limit(endpoint_name: str = None):
                     "failures": result.get("failures", 0),
                     "time":     datetime.utcnow().isoformat(),
                 }
-                print(f"🚫 SECURITY: {json.dumps(security_event)}")
+                print(f"SECURITY: {json.dumps(security_event)}")
 
                 return jsonify({
                     "error":   result.get("message", "Accès refusé"),
@@ -545,7 +530,7 @@ def run_simulation():
     SEP = "═" * 62
 
     print(f"\n{SEP}")
-    print("  🎬  SIMULATION — Attaque Brute Force sur /login")
+    print("  SIMULATION — Attaque Brute Force sur /login")
     print(f"{SEP}\n")
 
     print("""  Scénario : Un attaquant utilise credential stuffing
@@ -563,7 +548,7 @@ def run_simulation():
                    "Password1!", "Summer2024", "Company@123", "Welcome1"]
 
     print(f"  {'─'*60}")
-    print(f"  🔴 ATTAQUANT 1 : {attacker_ip} (brute force séquentiel)")
+    print(f"  ATTAQUANT 1 : {attacker_ip} (brute force séquentiel)")
     print(f"  {'─'*60}")
 
     timeline = []
@@ -579,23 +564,19 @@ def run_simulation():
             ts = f"T+{attempt * 2:03d}s"
 
             if not result["allowed"]:
-                icon = "🚫"
-                msg  = f"BLOQUÉ ({result['status']}) — retry dans {result.get('delay', 0)}s"
+                msg = f"BLOQUÉ ({result['status']}) — retry dans {result.get('delay', 0)}s"
             elif result["status"] == "slowdown":
-                icon = "🐌"
-                msg  = f"RALENTI — délai {result['delay']}s ajouté ({result['failures']} échecs)"
+                msg = f"RALENTI — délai {result['delay']}s ajouté ({result['failures']} échecs)"
             elif result["status"] == "warn":
-                icon = "⚠️ "
-                msg  = f"Passage en surveillance ({result['failures']} échecs)"
+                msg = f"Passage en surveillance ({result['failures']} échecs)"
             else:
-                icon = "🔓"
-                msg  = f"Tentative transmise (échec auth: mauvais pwd)"
+                msg = f"Tentative transmise (échec auth: mauvais pwd)"
 
-            print(f"  {ts}  {icon}  user={username:<15} pwd={password:<15}  → {msg}")
+            print(f"  {ts}  user={username:<15} pwd={password:<15}  → {msg}")
             timeline.append((attempt, result["status"], result["allowed"]))
 
             if not result["allowed"]:
-                print(f"\n  ✅  Attaque stoppée après {attempt} tentatives !")
+                print(f"\n  Attaque stoppée après {attempt} tentatives.")
                 break
         else:
             continue
@@ -603,7 +584,7 @@ def run_simulation():
 
     # ── Attaquant 2 : IP rotation ──
     print(f"\n  {'─'*60}")
-    print(f"  🟠 ATTAQUANT 2 : Rotation d'IPs (contournement naïf)")
+    print(f"  ATTAQUANT 2 : Rotation d'IPs (contournement naïf)")
     print(f"  {'─'*60}")
 
     rotating_ips = [f"198.51.100.{i}" for i in range(1, 8)]
@@ -615,10 +596,10 @@ def run_simulation():
 
         failures = limiter._count_recent_failures(ip, "login")
         print(f"  IP {ip}  →  {failures} échecs "
-              f"{'⚠️ surveillée' if failures >= 3 else '✓ sous seuil'}")
+              f"{'surveillée' if failures >= 3 else 'sous seuil'}")
 
     print(f"""
-  💡 Contre-mesure avancée (non implémentée ici) :
+  Contre-mesure avancée (non implémentée ici) :
      Analyser le fingerprint HTTP (User-Agent, timing, headers)
      et les patterns comportementaux plutôt que l'IP seule.
      → Outils : fail2ban, Cloudflare Turnstile, CAPTCHA adaptatif.
@@ -626,7 +607,7 @@ def run_simulation():
 
     # ── Statistiques finales ──
     print(f"  {'─'*60}")
-    print(f"  📊  TABLEAU DE BORD SÉCURITÉ")
+    print(f"  TABLEAU DE BORD SÉCURITÉ")
     print(f"  {'─'*60}")
     stats = limiter.get_stats()
     print(f"\n  Fenêtre d'analyse : {stats['window_minutes']} minutes")
@@ -643,11 +624,11 @@ def run_simulation():
     if stats["recent_alerts"]:
         print(f"\n  Alertes récentes :")
         for a in stats["recent_alerts"][:5]:
-            print(f"    🔔 [{a['type']:<18}] {a['ip']} — {a['details']}")
+            print(f"    [{a['type']:<18}] {a['ip']} — {a['details']}")
 
     # ── Scénario de récupération ──
     print(f"\n  {'─'*60}")
-    print(f"  🔧  SCÉNARIO RÉCUPÉRATION : Faux positif")
+    print(f"  SCÉNARIO RÉCUPÉRATION : Faux positif")
     print(f"  {'─'*60}")
     legitimate_ip = "10.0.0.50"
     print(f"\n  Simulation : employé en télétravail bloqué par erreur")
@@ -663,11 +644,11 @@ def run_simulation():
     limiter.unblock_ip(legitimate_ip)
     r2 = limiter.check_ip(legitimate_ip, "login")
     print(f"  Statut après déblocage : {r2['status']} — accès ? "
-          f"{'✅ OUI' if r2['allowed'] else '❌ NON'}")
+          f"{'OUI' if r2['allowed'] else 'NON'}")
 
     # ── Architecture de déploiement ──
     print(f"\n{SEP}")
-    print(f"  🏗️   ARCHITECTURE DE DÉPLOIEMENT")
+    print(f"  ARCHITECTURE DE DÉPLOIEMENT")
     print(f"{SEP}")
     print(f"""
   ┌────────────────────────────────────────────────────────┐
@@ -687,11 +668,11 @@ def run_simulation():
   limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
   limit_req zone=login burst=3 nodelay;
 
-  💡 Règle d'or : Plusieurs couches valent mieux qu'une seule.
+  Règle d'or : plusieurs couches valent mieux qu'une seule.
   NGINX bloque au niveau réseau, Flask au niveau applicatif.
 """)
 
-    print(f"  📋  Lien ISO 27001 — Contrôle A.9.4.2 :")
+    print(f"  Lien ISO 27001 — Contrôle A.9.4.2 :")
     print(f"  'Les tentatives de connexion infructueuses doivent être")
     print(f"  limitées et les tentatives répétées doivent déclencher")
     print(f"  un verrouillage de compte ou un délai croissant.'")
@@ -714,7 +695,7 @@ def main():
         run_simulation()
 
     elif args[0] == "server":
-        print("  🚀  Démarrage du serveur Flask de démo...")
+        print("  Démarrage du serveur Flask de démo...")
         print("  Endpoints :")
         print("    POST /login           → protégé par rate limiting")
         print("    GET  /api/data        → protégé par rate limiting")

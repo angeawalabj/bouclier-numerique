@@ -1,16 +1,11 @@
-# 🚦 Jour 06 — Rate Limiter & Pare-feu Applicatif
+# Jour 06 — Rate Limiter & Pare-feu Applicatif
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
-![Algorithm](https://img.shields.io/badge/Algorithm-Token+Bucket+·+Sliding+Window-00e5a0?style=flat-square)
-![Protection](https://img.shields.io/badge/Protection-DDoS+·+Brute+Force-ff3b3b?style=flat-square)
-
-</div>
+Fenêtre glissante + blocage progressif contre le brute force et le
+credential stuffing. Python 3.10+, middleware Flask.
 
 ---
 
-## 🎯 Problème résolu
+## Problème résolu
 
 Une API sans rate limiting est une cible parfaite pour le brute force (mots de passe), le credential stuffing (listes de comptes volés), et les attaques DDoS de couche 7. Ce rate limiter bloque automatiquement les sources abusives.
 
@@ -18,36 +13,46 @@ Une API sans rate limiting est une cible parfaite pour le brute force (mots de p
 
 ---
 
-## ⚡ Usage
+## Usage
 
 ```bash
 # Démo avec simulation d'attaque
 python rate_limiter.py demo
 
-# Lancer le middleware (intégration Flask/FastAPI)
+# Lancer le middleware (intégration Flask)
 python rate_limiter.py server --port 8080
 
 # Vérifier le statut d'une IP
 python rate_limiter.py status 192.168.1.100
 ```
 
+Intégration dans une route Flask existante :
+
+```python
+from rate_limiter import rate_limit
+
+@app.route("/login", methods=["POST"])
+@rate_limit("login")
+def login():
+    ...
+```
+
 ---
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
-- Token Bucket : lissage des pics de trafic légitime
-- Sliding Window : précision sur les fenêtres glissantes
+- Fenêtre glissante sur les échecs récents par IP + endpoint (SQLite)
+- Trois paliers : délai progressif, blocage temporaire, bannissement
 - Blocklist automatique avec durée configurable
 - Whitelist pour IPs internes
-- Middleware Python (décorateur `@rate_limit`)
-- Tableau de bord des requêtes bloquées
+- Décorateur `@rate_limit("nom_endpoint")` pour protéger une route Flask
 
 ---
 
-## ⚖️ Conformité
+## Conformité
 
 OWASP API Security Top 10 — API4:2023 Unrestricted Resource Consumption
 
 ---
 
-_Partie du challenge [🛡️ Le Bouclier Numérique](../README.md) — Jour 06/30_
+_Partie du challenge [Le Bouclier Numérique](../README.md) — Jour 06/30_

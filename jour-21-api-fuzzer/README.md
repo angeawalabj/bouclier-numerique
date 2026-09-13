@@ -1,20 +1,11 @@
-# 🕷️ Jour 21 — Fuzzer d'API Automatique (OWASP API Top 10)
+# Jour 21 — Fuzzer d'API Automatique (OWASP API Top 10)
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
-![OWASP](https://img.shields.io/badge/OWASP-API%20Top%2010%202023-e74c3c?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-API1%20→%20API10-f39c12?style=flat-square)
-![Legal](https://img.shields.io/badge/Usage-Vos%20APIs%20uniquement-27ae60?style=flat-square)
-
-**Une API non testée est une API vulnérable. Ce fuzzer le prouve en quelques secondes.**  
-IDOR · SQLi · SSRF · JWT bypass · Rate limiting · Headers · Endpoints cachés · Rapport HTML
-
-</div>
+IDOR, SQLi, SSRF, contournement JWT, rate limiting, headers, endpoints
+cachés, rapport HTML. Python 3.10+.
 
 ---
 
-## 🎯 Problème résolu
+## Problème résolu
 
 Les APIs REST modernes concentrent la quasi-totalité des vulnérabilités applicatives. L'OWASP API Security Top 10 montre que les mêmes failles se retrouvent dans 90% des audits : IDOR (accès aux données d'autres utilisateurs), absence de rate limiting, JWT mal vérifiés, endpoints d'administration oubliés...
 
@@ -29,7 +20,7 @@ Ce fuzzer aurait détecté cette faille en < 30 secondes.
 
 ---
 
-## ⚡ Démarrage rapide
+## Démarrage rapide
 
 ```bash
 # Démonstration sur une API vulnérable locale (aucune installation requise)
@@ -48,7 +39,7 @@ python3 api_fuzzer.py scan https://api.monapp.com --rate 0.5
 
 ---
 
-## 🔬 Architecture du moteur de fuzzing
+## Architecture du moteur de fuzzing
 
 ```
 ApiFuzzer
@@ -73,7 +64,7 @@ ApiFuzzer
 
 ---
 
-## 📊 Rapport HTML généré
+## Rapport HTML généré
 
 Le rapport inclut pour chaque vulnérabilité :
 - Sévérité (Critique / Élevée / Modérée / Faible) avec score global /100
@@ -84,7 +75,7 @@ Le rapport inclut pour chaque vulnérabilité :
 
 ---
 
-## ⚠️ Usage légal
+## Usage légal
 
 > Ce fuzzer effectue de vraies requêtes HTTP contre la cible. **Ne l'utilisez que sur :**
 > - Vos propres APIs en développement ou staging
@@ -95,7 +86,7 @@ Utilisation non autorisée : **Art. L323-1 Code pénal** — jusqu'à 2 ans et 6
 
 ---
 
-## ⚖️ Conformité
+## Conformité
 
 | Référentiel | Lien |
 |------------|------|
@@ -106,4 +97,4 @@ Utilisation non autorisée : **Art. L323-1 Code pénal** — jusqu'à 2 ans et 6
 
 ---
 
-_Partie du challenge [🛡️ Le Bouclier Numérique](../README.md) — Jour 21/30 · Semaine 5 — Red Team_
+_Partie du challenge [Le Bouclier Numérique](../README.md) — Jour 21/30 · Semaine 5 — Red Team_

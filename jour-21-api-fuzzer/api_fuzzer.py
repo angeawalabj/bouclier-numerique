@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 21 : FUZZER D'API AUTOMATIQUE  ║
-║  Objectif  : Détecter les vulnérabilités OWASP API Top 10      ║
-║  Technique : Fuzzing ciblé · Payloads adaptatifs · Rapport HTML ║
-║  Légalité  : Usage sur vos propres APIs UNIQUEMENT             ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Fuzzer ciblé pour les 10 classes de vulnérabilités de l'OWASP API Top 10.
 
-Problème concret : Une API REST non testée expose souvent des dizaines
-de vulnérabilités silencieuses : paramètres non validés, injection SQL
-dans les query strings, IDOR (accès aux ressources d'autres utilisateurs),
-tokens JWT mal vérifiés, rate limiting absent, données sensibles dans
-les réponses d'erreur...
+Une API REST non testée expose rarement une seule faille béante — plutôt
+une dizaine de petits défauts silencieux : un paramètre d'ID qui accepte
+n'importe quel entier sans vérifier qu'il appartient à l'appelant (IDOR),
+un JWT dont la signature n'est jamais vérifiée côté serveur, un endpoint
+de debug oublié en production, une réponse d'erreur qui renvoie la stack
+trace complète. Chacun de ces défauts est trivial isolément mais réel :
+c'est le genre de chose qu'un pentest manuel presse par le temps saute
+facilement. Ce module ne fait pas un scan générique — chaque classe
+(API1 à API10) a sa propre stratégie de test parce que la façon de
+prouver un IDOR (rejouer une requête avec un ID différent et comparer
+les réponses) n'a rien à voir avec la façon de prouver une absence de
+rate limiting (mesurer si le nombre de requêtes acceptées dépasse un
+seuil raisonnable dans une fenêtre de temps donnée).
 
-Ce fuzzer automatise la détection des vulnérabilités OWASP API Top 10 :
-  API1  — Broken Object Level Authorization (IDOR)
-  API2  — Broken Authentication (JWT, tokens)
-  API3  — Broken Object Property Level Auth (mass assignment)
-  API4  — Unrestricted Resource Consumption (rate limiting)
-  API5  — Broken Function Level Authorization (méthodes HTTP)
-  API6  — Unrestricted Access to Sensitive Business Flows
-  API7  — Server Side Request Forgery (SSRF)
-  API8  — Security Misconfiguration (headers, CORS, erreurs)
-  API9  — Improper Inventory Management (versions, endpoints cachés)
-  API10 — Unsafe Consumption of APIs (injections)
-
-Conformité : OWASP API Security Top 10 2023 · ISO 27001 A.14.2.8
+Usage légal uniquement sur des APIs que vous possédez ou êtes autorisé
+à tester.
 """
 
 import json
@@ -719,7 +710,7 @@ class ApiFuzzer:
 
         if output_path:
             output_path.write_text(report, encoding="utf-8")
-            print(f"\n  📄  Rapport HTML → {output_path}")
+            print(f"\n  Rapport HTML → {output_path}")
 
         return report
 
@@ -813,14 +804,11 @@ def run_demo():
     SEP = "=" * 62
 
     print(f"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 21 : FUZZER D'API              ║
-║  OWASP API Security Top 10 (2023) · Test sur API locale        ║
-╚══════════════════════════════════════════════════════════════════╝
+  Fuzzer d'API — OWASP API Security Top 10 (2023), test sur API locale
 
-  ⚠️  RAPPEL LÉGAL : Ce fuzzer est conçu pour tester VOS propres
-  APIs. Toute utilisation sur des systèmes tiers sans autorisation
-  écrite est une infraction pénale (Art. L323-1 CP).
+  Rappel légal : ce fuzzer est conçu pour tester VOS propres APIs.
+  Toute utilisation sur des systèmes tiers sans autorisation écrite
+  est une infraction pénale (Art. L323-1 CP).
 """)
 
     # Lancer l'API vulnérable en arrière-plan
@@ -836,9 +824,9 @@ def run_demo():
         )
         server_thread.start()
         time.sleep(1.0)  # Laisser Flask démarrer
-        print(f"  🚀  API de démonstration vulnérable démarrée sur {api_url}\n")
+        print(f"  API de démonstration vulnérable démarrée sur {api_url}\n")
     else:
-        print("  ⚠️  Flask non disponible — démonstration en mode simulé\n")
+        print("  Flask non disponible — démonstration en mode simulé\n")
         api_url = "http://demo.bouclier-numerique.local"  # Simulation
 
     fuzzer = ApiFuzzer(
@@ -886,16 +874,16 @@ def run_demo():
             print(f"     → {f['remediation'][:80]}...")
             print()
     else:
-        print("  ✅  Aucune vulnérabilité détectée.")
+        print("  Aucune vulnérabilité détectée.")
 
     counts = defaultdict(int)
     for f in fuzzer.findings:
         counts[f["severity"]] += 1
 
     print(f"  {'─'*60}")
-    print(f"  🔴 Critique : {counts['CRITIQUE']}  |  🟠 Élevée : {counts['ÉLEVÉE']}  |  "
-          f"🟡 Modérée : {counts['MODÉRÉE']}  |  🟢 Faible : {counts['FAIBLE']}")
-    print(f"  📡 Requêtes envoyées : {fuzzer._req_count}")
+    print(f"  Critique : {counts['CRITIQUE']}  |  Élevée : {counts['ÉLEVÉE']}  |  "
+          f"Modérée : {counts['MODÉRÉE']}  |  Faible : {counts['FAIBLE']}")
+    print(f"  Requêtes envoyées : {fuzzer._req_count}")
 
     # Générer le rapport HTML
     report_path = Path("/tmp/rapport_pentest_api.html")
@@ -903,18 +891,18 @@ def run_demo():
 
     print(f"""
   {SEP}
-  📋  BILAN — OWASP API Security Top 10
+  Bilan — OWASP API Security Top 10
 
   Ce scan a détecté des vulnérabilités typiques d'une API
   de développement non durcie :
 
-  🔴  IDOR (API1) : n'importe quel ID est accessible
-  🔴  Auth absente (API2) : endpoint admin sans token
-  🔴  SQLi (API10) : erreur SQL exposée dans la réponse
-  🔴  SSRF (API7) : fetch d'URLs internes possible
-  🟠  Rate limiting absent (API4) : brute force possible
-  🟡  Headers de sécurité manquants (API8)
-  🟡  Endpoints non documentés (API9)
+  - IDOR (API1) : n'importe quel ID est accessible
+  - Auth absente (API2) : endpoint admin sans token
+  - SQLi (API10) : erreur SQL exposée dans la réponse
+  - SSRF (API7) : fetch d'URLs internes possible
+  - Rate limiting absent (API4) : brute force possible
+  - Headers de sécurité manquants (API8)
+  - Endpoints non documentés (API9)
 
   En production, chacune de ces failles peut mener à :
   Vol de données personnelles → RGPD Art. 33 (notification 72h)
@@ -964,8 +952,8 @@ def main():
 
         endpoints = args.endpoint or ["/api/v1/users/1"]
 
-        print(f"\n  🎯  Cible : {args.url}")
-        print(f"  📡  Endpoints : {endpoints}\n")
+        print(f"\n  Cible : {args.url}")
+        print(f"  Endpoints : {endpoints}\n")
 
         fuzzer.test_security_headers()
         fuzzer.test_hidden_endpoints()
@@ -978,7 +966,7 @@ def main():
 
         output = Path(args.output) if args.output else Path("rapport_pentest.html")
         fuzzer.generate_report(output)
-        print(f"\n  ✅  Scan terminé · {len(fuzzer.findings)} finding(s) · Rapport : {output}")
+        print(f"\n  Scan terminé · {len(fuzzer.findings)} finding(s) · Rapport : {output}")
 
 
 if __name__ == "__main__":

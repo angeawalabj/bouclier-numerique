@@ -1,31 +1,20 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 12 : REGISTRE DES TRAITEMENTS    ║
-║  Obligation : Art. 30 RGPD — Registre obligatoire (50+ salariés)║
-║  Conforme   : Modèle CNIL 2024 · ISO 27701 · ePrivacy           ║
-║  Fonctions  : CRUD traitements · Score conformité · Export HTML  ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Tient le registre des traitements exigé par l'Art. 30 RGPD et calcule
+un score de conformité à partir de contrôles vérifiables plutôt que
+d'une simple checklist déclarative.
 
-Exigence légale : Art. 30 RGPD — Toute organisation traitant des
-données personnelles doit tenir un registre écrit de l'ensemble
-de ses activités de traitement. Obligatoire pour les entreprises
-de 50+ salariés, fortement recommandé en-dessous.
-
-Contenu obligatoire du registre (Art. 30 §1) :
-  a) Nom et coordonnées du responsable de traitement + DPO
-  b) Finalités du traitement
-  c) Catégories de personnes concernées et de données
-  d) Catégories de destinataires
-  e) Transferts vers pays tiers + garanties
-  f) Délais de conservation prévus
-  g) Description des mesures de sécurité (Art. 32)
-
-Sanctions : Art. 83 §4 — jusqu'à 10M€ ou 2% CA mondial
-pour défaut de registre lors d'un contrôle CNIL.
-
-Cas réel : La CNIL peut demander le registre à tout moment
-lors d'une inspection. Absence = mise en demeure immédiate.
+Le registre est stocké en SQLite, avec les champs à cardinalité
+variable (destinataires, sous-traitants, mesures de sécurité,
+transferts hors UE) sérialisés en JSON dans des colonnes dédiées —
+un choix qui garde la donnée structurée et interrogeable, à la
+différence d'un tableur RGPD où ces colonnes finissent presque
+toujours en texte libre impossible à vérifier automatiquement. Le
+vérificateur de conformité pondère sept contrôles indépendants
+(organisation et DPO renseignés, champs obligatoires par traitement,
+mesures de sécurité Art. 32, AIPD pour les catégories sensibles
+Art. 9, garanties sur les transferts hors UE, délais de conservation,
+suivi des violations Art. 33) et exporte un rapport HTML autonome et
+imprimable — le format généralement demandé lors d'un contrôle CNIL.
 """
 
 import os
@@ -607,7 +596,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
              padding: 30px; border-radius: 8px; margin-bottom: 30px; }
     header h1 { font-size: 24px; margin-bottom: 6px; }
     header .meta { font-size: 12px; opacity: .8; }
-    .logo { float: right; font-size: 40px; }
 
     /* Score card */
     .score-section { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
@@ -677,7 +665,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="page">
 
   <header>
-    <div class="logo">📋</div>
     <h1>Registre des activités de traitement</h1>
     <p>{{ org.nom }}{% if org.siren %} · SIREN {{ org.siren }}{% endif %}</p>
     <div class="meta">
@@ -713,7 +700,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <!-- Checks détaillés -->
   <div class="section">
-    <h2>📊 État des contrôles de conformité</h2>
+    <h2>État des contrôles de conformité</h2>
     <div class="checks-grid">
       {% for name, value in conformite.checks.items() %}
       <div class="check-item {% if '✅' in value %}ok{% elif '❌' in value %}err{% else %}warn{% endif %}">
@@ -726,7 +713,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <!-- Registre des traitements -->
   <div class="section">
-    <h2>🗂️ Registre des activités de traitement (Art. 30 RGPD)</h2>
+    <h2>Registre des activités de traitement (Art. 30 RGPD)</h2>
     <table>
       <thead>
         <tr>
@@ -760,7 +747,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <br><span class="badge badge-err">Art. 9 — Données sensibles</span>
             {% endif %}
           </td>
-          <td>{{ t.delai_conservation or '⚠️ Non défini' }}</td>
+          <td>{{ t.delai_conservation or 'Non défini' }}</td>
           <td>
             {% if t.mesures_securite %}
             <span class="badge badge-ok">{{ t.mesures_securite|length }} mesure(s)</span>
@@ -782,7 +769,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <!-- Anomalies -->
   {% if conformite.anomalies %}
   <div class="section">
-    <h2>⚠️ Anomalies de conformité détectées</h2>
+    <h2>Anomalies de conformité détectées</h2>
     {% for a in conformite.anomalies %}
     <div class="anomalie {{ a.gravite }}">
       <h4>{{ a.gravite }}{% if a.get('ref') %} · {{ a.ref }}{% endif %}</h4>
@@ -796,7 +783,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <!-- Recommandations -->
   {% if conformite.recommandations %}
   <div class="section">
-    <h2>🎯 Plan d'action recommandé</h2>
+    <h2>Plan d'action recommandé</h2>
     <table>
       <thead>
         <tr><th>Priorité</th><th>Action corrective</th><th>Article</th><th>Délai</th></tr>
@@ -822,7 +809,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <!-- Violations -->
   {% if violations %}
   <div class="section">
-    <h2>🚨 Registre des violations (Art. 33 RGPD)</h2>
+    <h2>Registre des violations (Art. 33 RGPD)</h2>
     <table>
       <thead>
         <tr><th>Réf.</th><th>Traitement</th><th>Date</th><th>Gravité</th>
@@ -836,7 +823,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <td>{{ v.date_decouverte[:10] }}</td>
           <td><span class="badge {% if v.gravite == 'CRITIQUE' %}badge-err{% elif v.gravite == 'ELEVEE' %}badge-warn{% else %}badge-blue{% endif %}">{{ v.gravite }}</span></td>
           <td>{{ v.personnes_affectees or '?' }}</td>
-          <td>{% if v.date_notification_cnil %}✅ {{ v.date_notification_cnil[:10] }}{% else %}<span class="badge badge-err">Non notifiée</span>{% endif %}</td>
+          <td>{% if v.date_notification_cnil %}{{ v.date_notification_cnil[:10] }}{% else %}<span class="badge badge-err">Non notifiée</span>{% endif %}</td>
           <td>{{ v.statut }}</td>
         </tr>
         {% endfor %}
@@ -1107,22 +1094,18 @@ def run_demo(output_html: Path = None):
 
         # ── Export HTML ──
         print(f"\n  {'─'*60}")
-        print(f"  📄  GÉNÉRATION DU RAPPORT HTML OFFICIEL")
+        print("  Génération du rapport HTML officiel")
         print(f"  {'─'*60}\n")
 
-        if output_html is None:
-            # Si pas de chemin spécifié, copier dans outputs
-            html_final = Path("/mnt/user-data/outputs/registre_rgpd.html")
-        else:
-            html_final = output_html
+        html_final = output_html or Path("./output/registre_rgpd.html")
 
         generer_rapport_html(registre, html_final)
-        print(f"  ✅  Rapport généré : {html_final}")
+        print(f"  Rapport généré : {html_final}")
         print(f"  Taille : {html_final.stat().st_size:,} octets")
 
         # ── Bilan ──
         print(f"\n{SEP}")
-        print(f"  📋  CONFORMITÉ ART. 30 RGPD")
+        print("  Conformité Art. 30 RGPD")
         print(f"{SEP}\n")
         print(
             "  Ce registre couvre les 7 mentions obligatoires :\n"
@@ -1153,11 +1136,22 @@ def run_demo(output_html: Path = None):
 # ================================================================
 
 def main():
-    print(__doc__)
-    parser = argparse.ArgumentParser(description="Registre RGPD — Bouclier Numérique Jour 10")
+    parser = argparse.ArgumentParser(description="Registre RGPD — Bouclier Numérique Jour 12")
     sub    = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("demo", help="Démonstration complète")
+
+    p_add = sub.add_parser("add", help="Ajouter un traitement au registre")
+    p_add.add_argument("--nom", required=True)
+    p_add.add_argument("--finalite", required=True, help="Finalité du traitement (mention b)")
+    p_add.add_argument("--base-legale", required=True, dest="base_legale",
+                        help="Ex: 6.1.a (consentement), 6.1.b (contrat), 6.1.f (intérêt légitime)")
+    p_add.add_argument("--description", default="")
+    p_add.add_argument("--categories-personnes", dest="categories_personnes", default="")
+    p_add.add_argument("--categories-donnees", dest="categories_donnees", default="")
+    p_add.add_argument("--delai-conservation", dest="delai_conservation", default="")
+    p_add.add_argument("--responsable", dest="responsable_metier", default="")
+    p_add.add_argument("--db", default="/tmp/registre_rgpd.db")
 
     p_export = sub.add_parser("export", help="Exporter le rapport")
     p_export.add_argument("--html", default="registre_rgpd.html")
@@ -1178,9 +1172,24 @@ def main():
     db       = getattr(args, "db", "/tmp/registre_rgpd.db")
     registre = RegistreRGPD(db)
 
-    if args.cmd == "export":
+    if args.cmd == "add":
+        data = {
+            "nom": args.nom,
+            "finalite": args.finalite,
+            "base_legale": args.base_legale,
+            "description": args.description,
+            "categories_personnes": args.categories_personnes,
+            "categories_donnees": args.categories_donnees,
+            "delai_conservation": args.delai_conservation,
+            "responsable_metier": args.responsable_metier,
+        }
+        data = {k: v for k, v in data.items() if v}
+        ref = registre.ajouter_traitement(data, auteur="cli")
+        print(f"\n  Traitement ajouté : {ref}")
+
+    elif args.cmd == "export":
         generer_rapport_html(registre, Path(args.html))
-        print(f"\n  ✅  Rapport HTML : {args.html}")
+        print(f"\n  Rapport HTML : {args.html}")
 
     elif args.cmd == "check":
         c = registre.verifier_conformite()
@@ -1188,7 +1197,7 @@ def main():
         for k, v in c["checks"].items():
             print(f"  {k}: {v}")
         for a in c["anomalies"]:
-            print(f"\n  ⚠️  {a['gravite']}: {a['message']}")
+            print(f"\n  {a['gravite']}: {a['message']}")
 
     elif args.cmd == "list":
         ts = registre.lister_traitements()

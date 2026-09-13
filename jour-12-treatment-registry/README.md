@@ -1,20 +1,11 @@
-# 📋 Jour 12 — Registre des Traitements RGPD (Art. 30)
+# Jour 12 — Registre des Traitements RGPD (Art. 30)
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
-![RGPD](https://img.shields.io/badge/RGPD-Art.%2030%20obligatoire-ff3b3b?style=flat-square)
-![Output](https://img.shields.io/badge/Output-HTML%20·%20DOCX%20·%20JSON-00e5a0?style=flat-square)
-![CNIL](https://img.shields.io/badge/Amende-10M€%20ou%202%25%20CA-f5a623?style=flat-square)
-
-**Le registre des traitements est obligatoire depuis le 25 mai 2018. Sans lui, c'est la mise en demeure CNIL.**  
-Détection automatique des anomalies · Export rapport HTML · Score de conformité
-
-</div>
+Détection automatique d'anomalies, export HTML, score de conformité
+calculé (pas déclaratif). Python 3.10+, SQLite.
 
 ---
 
-## 🎯 Problème résolu
+## Problème résolu
 
 **Art. 30 RGPD** : toute organisation traitant des données personnelles doit tenir un registre écrit couvrant exactement 7 mentions obligatoires (a) à (g). La CNIL peut le demander à tout moment lors d'une inspection. L'absence est l'une des infractions les plus fréquemment sanctionnées car la plus simple à vérifier.
 
@@ -28,28 +19,31 @@ Avec ce script : python registre_traitements.py export --html rapport.html · 3 
 
 ---
 
-## ⚡ Démarrage rapide
+## Démarrage rapide
 
 ```bash
 # Démo complète avec 6 traitements réalistes et détection d'anomalies
 python registre_traitements.py demo
 
 # Ajouter un traitement
-python registre_traitements.py add --name "CRM Salesforce" --base-legale "6.1.b"
+python registre_traitements.py add \
+  --nom "CRM Salesforce" \
+  --finalite "Gestion de la relation client" \
+  --base-legale "6.1.b"
 
-# Vérifier la conformité
+# Lister les traitements enregistrés
+python registre_traitements.py list
+
+# Vérifier la conformité (score calculé, pas déclaratif)
 python registre_traitements.py check
 
 # Export rapport HTML (contrôle CNIL)
 python registre_traitements.py export --html rapport_cnil.html
-
-# Export JSON (intégration SIRH)
-python registre_traitements.py export --json registre.json
 ```
 
 ---
 
-## 🔬 Les 7 mentions obligatoires (Art. 30)
+## Les 7 mentions obligatoires (Art. 30)
 
 | Mention | Description | Champ dans l'outil |
 |---------|-------------|-------------------|
@@ -63,19 +57,19 @@ python registre_traitements.py export --json registre.json
 
 ---
 
-## 🚨 Détection automatique d'anomalies
+## Détection automatique d'anomalies
 
 Le vérificateur analyse 7 points de conformité sur chaque traitement :
 
 ```
 [2 anomalies détectées sur TechCorp SARL]
 
-🔴 CRITIQUE — Traitement "Transferts financiers"
+CRITIQUE — Traitement "Transferts financiers"
    Transfert hors UE vers Maroc sans CCT documentées
    → Art. 44-49 RGPD : violation directe du chapitre V
    Action : Signer les Clauses Contractuelles Types Commission EU 2021/914
 
-🟠 MAJEUR — Traitement "Recrutement LinkedIn"
+MAJEUR — Traitement "Recrutement LinkedIn"
    Aucune mesure de sécurité documentée
    → Art. 32 RGPD
    Action : Documenter chiffrement, contrôle d'accès, politique de rétention
@@ -85,19 +79,18 @@ Score de conformité : 86/100
 
 ---
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
 - 6 traitements réalistes pré-chargés en démo (CRM, RH, analytics, vidéosurveillance...)
+- Ajout de traitements réels via `add` (pas seulement en démo)
 - Score de conformité sur 100 avec détail par traitement
 - Détection des transferts hors UE sans garanties appropriées
 - Alerte sur les données sensibles (santé, biométrie) sans AIPD documentée
 - Rapport HTML professionnel (prêt pour inspection CNIL)
-- Export JSON pour intégration dans vos outils existants
-- Interface web minimale pour les DPO non-techniques
 
 ---
 
-## 📊 Score de conformité — méthode de calcul
+## Score de conformité — méthode de calcul
 
 Le score n'est pas arbitraire. 100 points sont répartis :
 
@@ -111,7 +104,7 @@ Chaque anomalie déduit des points et pointe vers l'article précis et une actio
 
 ---
 
-## ⚖️ Conformité
+## Conformité
 
 | Référentiel | Exigence |
 |------------|---------|
@@ -119,8 +112,8 @@ Chaque anomalie déduit des points et pointe vers l'article précis et une actio
 | **RGPD Art. 83 §4** | Amende jusqu'à 10M€ ou 2% du CA pour non-conformité |
 | **CNIL** | Guide pratique des sous-traitants — registre modèle |
 
-> **Note :** Ce script est également fourni avec un générateur de DPA (Contrat de Sous-traitance Art. 28) dans le fichier bonus `dpa_generator.py`.
+> **Note :** Ce script est complété par un générateur de DPA (Contrat de Sous-traitance Art. 28) dans le fichier bonus `dpa_generator.py`.
 
 ---
 
-_Partie du challenge [🛡️ Le Bouclier Numérique](../README.md) — Jour 12/30_
+_Partie du challenge [Le Bouclier Numérique](../README.md) — Jour 12/30_

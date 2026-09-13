@@ -1,33 +1,23 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 24 : CRAWLER OSINT            ║
-║  Objectif  : Cartographier l'empreinte publique de votre org. ║
-║  Sources   : WHOIS · DNS · Certificats · Headers · GitHub     ║
-║  Usage     : Défensif — connaître ce qu'un attaquant voit     ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Cartographie l'empreinte publique d'un domaine en reconnaissance passive : DNS, certificats, WHOIS, TLS, GitHub.
 
-L'OSINT (Open Source INTelligence) est la première phase de tout
-pentest ou attaque ciblée. Un attaquant passe 60–80% de son temps
-en reconnaissance avant d'envoyer la première requête offensive.
+Un attaquant qui cible une organisation ne commence presque jamais par
+une requête active contre l'infrastructure : il agrège d'abord ce qui
+est déjà public — logs de Certificate Transparency, enregistrements
+DNS, métadonnées WHOIS/RDAP, headers HTTP, dépôts GitHub. C'est
+justement ce qui rend cette phase invisible aux systèmes de détection
+classiques, puisque rien de tout cela ne touche directement la cible.
+Le choix de crt.sh est le plus significatif techniquement : depuis
+l'obligation de journalisation Certificate Transparency, tout
+certificat émis par une autorité publique (Let's Encrypt compris) est
+publié dans des registres consultables, ce qui révèle des
+sous-domaines qu'une résolution DNS classique ou un brute-force de
+wordlist ne trouverait pas. Ce script reproduit cette même collecte,
+mais dans un but défensif : permettre à une organisation de découvrir
+sa propre surface d'attaque — sous-domaines oubliés, SPF/DMARC absents,
+TLS obsolète — avant qu'un tiers ne le fasse.
 
-Ce que ce script cartographie (comme un attaquant le ferait) :
-  🌐  Infrastructure  — sous-domaines, IPs, ASN, localisation
-  📜  Certificats SSL — Certificate Transparency (crt.sh)
-  🔍  DNS             — enregistrements A/MX/TXT/CNAME/NS/SOA
-  📋  WHOIS           — registrant, dates, nameservers
-  🔒  Sécurité TLS    — version, cipher, HSTS, headers
-  📂  GitHub          — dépôts publics, langages, contributeurs
-  🕵️  Emails          — formats probables, erreurs de config SPF/DMARC
-  🌍  Géolocalisation — pays/ville de chaque IP
-
-Défense : savoir ce qui est visible vous permet de :
-  1. Retirer les informations sensibles exposées publiquement
-  2. Sécuriser les sous-domaines oubliés (shadow IT)
-  3. Corriger les emails sans SPF/DMARC (vecteur phishing)
-  4. Identifier les services ouverts non intentionnels
-
-Conformité : ISO 27001 A.12.6.1 · ANSSI hygiène mesure 2
+Référence : ISO 27001 A.12.6.1, ANSSI (hygiène informatique, mesure 2).
 """
 
 import json
@@ -39,6 +29,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -391,9 +382,9 @@ class OsintCollector:
 
     def collect_all(self) -> dict:
         """Lance toutes les collectes en parallèle."""
-        print(f"\n  🎯  Cible : {self.domain}\n")
+        print(f"\n  Cible : {self.domain}\n")
 
-        with threading.ThreadPoolExecutor(max_workers=4) as ex:
+        with ThreadPoolExecutor(max_workers=4) as ex:
             futures = {
                 ex.submit(self.collect_dns):              "DNS",
                 ex.submit(self.collect_certificates):     "Certificats",
@@ -404,7 +395,7 @@ class OsintCollector:
                 try:
                     fut.result(timeout=30)
                 except Exception as e:
-                    print(f"  ⚠️  Erreur {futures[fut]}: {e}")
+                    print(f"  Erreur {futures[fut]}: {e}")
 
         # GitHub et IPs après DNS
         self.collect_github()
@@ -596,7 +587,7 @@ def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
 
     if output_path:
         output_path.write_text(report, encoding="utf-8")
-        print(f"\n  📄  Rapport → {output_path}")
+        print(f"\n  Rapport → {output_path}")
     return report
 
 
@@ -606,9 +597,7 @@ def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
 
 def run_demo():
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 24 : OSINT DÉFENSIF            ║
-╚══════════════════════════════════════════════════════════════════╝
+  Reconnaissance OSINT passive — Jour 24
 
   Ce script effectue une reconnaissance OSINT passive sur un
   domaine public en utilisant uniquement des sources légalement
@@ -624,28 +613,27 @@ def run_demo():
     # Afficher un résumé
     print(f"""
   ─────────────────────────────────────────────────────────
-  📊  RÉSULTATS POUR {data['domain'].upper()}
+  RÉSULTATS POUR {data['domain'].upper()}
   ─────────────────────────────────────────────────────────
 
-  🌐  Sous-domaines découverts : {len(data.get('subdomains', []))}
-  📜  Certificats SSL          : {len(data.get('certificates', []))}
-  🚨  Expositions              : {len(data.get('exposures', []))}
-  🔒  Version TLS              : {data.get('tls', {}).get('version', '?')}
-  📋  SPF configuré            : {'✅' if data.get('dns', {}).get('_analysis', {}).get('spf_configured') else '❌'}
-  📋  DMARC configuré          : {'✅' if data.get('dns', {}).get('_analysis', {}).get('dmarc_configured') else '❌'}
-  🔒  HSTS                     : {'✅' if 'strict-transport-security' in data.get('headers', {}) else '❌'}
+  Sous-domaines découverts : {len(data.get('subdomains', []))}
+  Certificats SSL          : {len(data.get('certificates', []))}
+  Expositions              : {len(data.get('exposures', []))}
+  Version TLS              : {data.get('tls', {}).get('version', '?')}
+  SPF configuré            : {'oui' if data.get('dns', {}).get('_analysis', {}).get('spf_configured') else 'non'}
+  DMARC configuré          : {'oui' if data.get('dns', {}).get('_analysis', {}).get('dmarc_configured') else 'non'}
+  HSTS                     : {'oui' if 'strict-transport-security' in data.get('headers', {}) else 'non'}
 """)
 
     if data.get("subdomains"):
-        print("  🏷️  Premiers sous-domaines :")
+        print("  Premiers sous-domaines :")
         for s in data["subdomains"][:10]:
-            print(f"     • {s}")
+            print(f"     - {s}")
 
     if data.get("exposures"):
-        print("\n  🚨  Expositions détectées :")
+        print("\n  Expositions détectées :")
         for e in data["exposures"]:
-            icon = {"CRITIQUE":"🔴","ÉLEVÉE":"🟠","MODÉRÉE":"🟡","FAIBLE":"🟢"}.get(e["severity"],"⚪")
-            print(f"     {icon} [{e['severity']}] {e['type']} — {e['detail'][:60]}...")
+            print(f"     [{e['severity']}] {e['type']} — {e['detail'][:60]}...")
 
     report_path = Path("/tmp/rapport_osint.html")
     generate_report(data, report_path)
@@ -699,7 +687,7 @@ def main():
 
     out = Path(args.output or f"osint_{args.domain.replace('.','_')}.html")
     generate_report(data, out)
-    print(f"\n✅ Scan terminé · {len(data.get('exposures',[]))} exposition(s) · {len(data.get('subdomains',[]))} sous-domaine(s)")
+    print(f"\nScan terminé · {len(data.get('exposures',[]))} exposition(s) · {len(data.get('subdomains',[]))} sous-domaine(s)")
 
 
 if __name__ == "__main__":

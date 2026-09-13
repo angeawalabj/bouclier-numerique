@@ -1,42 +1,36 @@
-# 🕵️ Jour 24 — Crawler OSINT
+# Jour 24 — Crawler OSINT
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
-![Sources](https://img.shields.io/badge/Sources-DNS·SSL·crt.sh·Headers-0078d4?style=flat-square)
-![Legal](https://img.shields.io/badge/Légal-Données%20publiques-00e5a0?style=flat-square)
-
-**En 30 secondes, un attaquant cartographie votre domaine. Faites-le avant lui.**  
-DNS · SPF/DMARC · Certificats CT logs · Sous-domaines · Headers HTTP
-
-</div>
+DNS · SPF/DMARC · Certificats (crt.sh) · Sous-domaines · Headers HTTP · WHOIS/RDAP · GitHub
 
 ---
 
-## 🎯 Problème résolu
+## Problème résolu
 
-L'OSINT est la première étape de tout test d'intrusion. Ce scanner collecte toutes les informations publiques sur votre domaine : sous-domaines exposés via les CT logs, configuration email anti-phishing, headers révélant vos technologies.
+L'OSINT (reconnaissance passive) est la première étape de tout test d'intrusion : un attaquant cartographie l'empreinte publique d'une cible avant d'envoyer la moindre requête offensive. Ce script reproduit cette collecte à des fins défensives, pour qu'une organisation découvre sa propre surface d'attaque — sous-domaines oubliés, configuration email vulnérable au phishing, headers révélant ses technologies — avant qu'un tiers ne le fasse.
 
 ```bash
 python3 osint_crawler.py scan votre-domaine.fr
-python3 osint_crawler.py scan votre-domaine.fr --output rapport.html
+python3 osint_crawler.py scan votre-domaine.fr --output rapport.html --json donnees.json
 python3 osint_crawler.py demo
 ```
 
-## 🔬 Sources exploitées (100% légal)
+## Sources exploitées (données publiques)
 
 | Source | Ce qu'on collecte |
 |--------|------------------|
-| **DNS** | A, MX, NS, TXT, SPF, DMARC |
-| **crt.sh (CT logs)** | Tous les sous-domaines des certificats SSL |
-| **SSL direct** | Validité, expiration, SANs, émetteur |
-| **Headers HTTP** | Server, X-Powered-By, headers de sécurité |
+| **DNS (DoH Cloudflare)** | A, MX, NS, TXT, SPF, DMARC |
+| **crt.sh (Certificate Transparency)** | Sous-domaines révélés par les certificats SSL émis |
+| **TLS direct** | Version, cipher, validité, expiration, SANs |
+| **Headers HTTP** | Server, X-Powered-By, headers de sécurité (HSTS, CSP...) |
+| **RDAP** | Registrar, dates de création/expiration, nameservers |
+| **GitHub API** | Dépôts publics de l'organisation |
+| **ipapi.co** | Géolocalisation et ASN des IPs résolues |
 
-## ⚠️ Ce que l'absence de DMARC permet
+## Pourquoi l'absence de DMARC est un vrai problème
 
-Sans DMARC, n'importe qui peut envoyer un email avec `From: direction@votre-domaine.fr` et il sera livré normalement. C'est ainsi que fonctionnent 90% des attaques de phishing ciblé (spear phishing).
+Sans DMARC, rien n'empêche un tiers d'envoyer un email avec `From: direction@votre-domaine.fr` et de le voir livré normalement dans les boîtes de réception. C'est le vecteur derrière la majorité des campagnes de phishing ciblé (spear phishing).
 
-## ⚖️ Conformité
+## Conformité
 
 | Référentiel | Lien |
 |------------|------|
@@ -45,4 +39,4 @@ Sans DMARC, n'importe qui peut envoyer un email avec `From: direction@votre-doma
 | **ANSSI** | Hygiène informatique — maîtrise du SI exposé |
 
 ---
-_Partie du challenge [🛡️ Le Bouclier Numérique](../README.md) — Jour 24/30_
+_Partie du challenge [Le Bouclier Numérique](../README.md) — Jour 24/30_

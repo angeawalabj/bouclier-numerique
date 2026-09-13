@@ -1,40 +1,20 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 11 : DROIT À L'OUBLI AUTOMATISÉ  ║
-║  Loi     : Art. 17 RGPD — Droit à l'effacement                  ║
-║  Périmètre : SQL · JSON/NoSQL · Logs · Fichiers · Backups        ║
-║  Délai   : 30 jours max · Certificat d'effacement généré        ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Applique une demande d'effacement Art. 17 RGPD à travers les silos où
+les données d'un utilisateur finissent dispersées : base SQL, fichiers
+JSON, logs, CSV, uploads, backups.
 
-Exigence légale : Art. 17 RGPD — "La personne concernée a le
-droit d'obtenir du responsable du traitement l'effacement, dans
-les meilleurs délais, de données à caractère personnel la
-concernant."
-
-Délai : "dans les meilleurs délais et au plus tard dans un délai
-d'un mois" (Art. 12 §3 RGPD). En pratique, la CNIL considère
-72h comme délai raisonnable pour les systèmes automatisés.
-
-Ce script parcourt récursivement :
-  1. Bases SQL (SQLite — adaptable MySQL/PostgreSQL)
-  2. Fichiers JSON / NoSQL (MongoDB-like)
-  3. Fichiers de logs serveur (Nginx, Apache, applicatifs)
-  4. Fichiers CSV (exports, analytics)
-  5. Dossiers de fichiers personnels (uploads, avatars)
-  6. Backups (détection des archives contenant des données)
-
-À chaque étape :
-  - Détection des champs contenant les identifiants de l'utilisateur
-  - Effacement ou pseudonymisation selon le contexte
-  - Conservation de la preuve d'effacement (sans les données)
-  - Génération d'un certificat légal signé SHA-256
-
-Risque évité : Art. 83 §5 — jusqu'à 20M€ ou 4% CA mondial
-pour violation du droit à l'effacement (sanction maximale RGPD).
-
-Cas réel France : H&M France (2021) — 35M€ pour surveillance
-illicite. Clearview AI — 20M€ pour refus d'effacement.
+Le point délicat n'est pas de supprimer une ligne dans une table
+`users` — c'est de décider, table par table, s'il faut supprimer ou
+anonymiser : une commande passée doit rester dix ans en comptabilité
+(Art. L123-22 du code de commerce) mais son lien avec le client doit
+disparaître. Le script encode donc deux listes de tables (à vider /
+à conserver et anonymiser) plutôt qu'un DELETE générique, et journalise
+chaque action dans une base d'audit séparée avec un hash SHA-256 du
+résultat, pour pouvoir produire un certificat d'effacement opposable
+en cas de contrôle. Les backups ne sont jamais modifiés directement :
+ils sont recensés avec une date de purge à 30 jours, parce qu'un
+script qui va rouvrir des archives tar.gz est plus risqué que le
+problème qu'il est censé résoudre.
 """
 
 import os
@@ -709,13 +689,13 @@ class RightToErasure:
             "exceptions":   [],
         }
 
-        print(f"\n  🗑️   Effacement pour : {user_email or user_id}")
+        print(f"\n  Effacement pour : {user_email or user_id}")
         print(f"  Référence : {request_id}")
         print(f"  Mode : {'SIMULATION (dry-run)' if self.dry_run else 'RÉEL'}\n")
 
         # 1. Bases SQL
         for db_path in config.get("sql_databases", []):
-            print(f"  🗄️   SQL      : {Path(db_path).name}")
+            print(f"  SQL      : {Path(db_path).name}")
             r = self.erase_sqlite(db_path, user_id, request_id,
                                    config.get("user_fields"))
             summary["results"]["sql"] = r
@@ -723,34 +703,34 @@ class RightToErasure:
 
         # 2. JSON / NoSQL
         for folder in config.get("json_folders", []):
-            print(f"  📄  JSON/NoSQL : {folder}")
+            print(f"  JSON/NoSQL : {folder}")
             r = self.erase_json_files(folder, user_id, user_email, request_id)
             summary["results"]["json"] = r
             summary["total_records"] += r["records_removed"]
 
         # 3. Logs
         for log_path in config.get("log_paths", []):
-            print(f"  📋  Logs     : {log_path}")
+            print(f"  Logs     : {log_path}")
             r = self.erase_logs(log_path, user_id, user_email, request_id)
             summary["results"]["logs"] = r
 
         # 4. CSV
         for csv_path in config.get("csv_paths", []):
-            print(f"  📊  CSV      : {csv_path}")
+            print(f"  CSV      : {csv_path}")
             r = self.erase_csv(csv_path, user_id, user_email, request_id)
             summary["results"]["csv"] = r
             summary["total_records"] += r["rows_deleted"]
 
         # 5. Fichiers utilisateurs
         for uploads_dir in config.get("uploads_dirs", []):
-            print(f"  📁  Fichiers : {uploads_dir}")
+            print(f"  Fichiers : {uploads_dir}")
             r = self.erase_user_files(uploads_dir, user_id, request_id)
             summary["results"]["files"] = r
             summary["total_files"] += r["files_deleted"]
 
         # 6. Backups
         for backup_dir in config.get("backup_dirs", []):
-            print(f"  💾  Backups  : {backup_dir}")
+            print(f"  Backups  : {backup_dir}")
             r = self.check_backups(backup_dir, user_id, user_email, request_id)
             summary["results"]["backups"] = r
             summary["exceptions"] = r.get("need_review", [])
@@ -858,7 +838,7 @@ def run_demo():
 
         # ── Création des données de test ──
         print(f"  {'─'*60}")
-        print(f"  🏗️   ÉTAPE 1 : Simulation de l'environnement")
+        print(f"  ÉTAPE 1 : Simulation de l'environnement")
         print(f"  {'─'*60}\n")
 
         # 1. Base SQL
@@ -906,7 +886,7 @@ def run_demo():
                          (USER_ID, "Votre commande a été expédiée"))
         conn.commit()
         conn.close()
-        print(f"  ✅  Base SQL créée : users, sessions, orders, notifications")
+        print(f"  Base SQL créée : users, sessions, orders, notifications")
 
         # 2. Fichiers JSON (analytics)
         json_dir = tmp / "analytics"
@@ -938,7 +918,7 @@ def run_demo():
                        indent=2),
             encoding="utf-8"
         )
-        print(f"  ✅  Fichiers JSON créés : events_2024.json, profiles.json")
+        print(f"  Fichiers JSON créés : events_2024.json, profiles.json")
 
         # 3. Logs
         log_dir = tmp / "logs"
@@ -952,7 +932,7 @@ def run_demo():
             f'10.0.0.2 - admin@company.com [15/Jan/2024:11:00:00] "GET /admin" 200',
         ])
         (log_dir / "access.log").write_text(log_content, encoding="utf-8")
-        print(f"  ✅  Logs créés : access.log ({len(log_content.splitlines())} lignes)")
+        print(f"  Logs créés : access.log ({len(log_content.splitlines())} lignes)")
 
         # 4. CSV
         csv_dir = tmp / "exports"
@@ -966,14 +946,14 @@ def run_demo():
         with open(tmp / "exports" / "customers.csv", "w",
                   newline="", encoding="utf-8") as f:
             csv.writer(f).writerows(rows)
-        print(f"  ✅  CSV créé : customers.csv")
+        print(f"  CSV créé : customers.csv")
 
         # 5. Fichiers utilisateur
         uploads = tmp / "uploads"
         (uploads / "users" / USER_ID).mkdir(parents=True)
         (uploads / "users" / USER_ID / "avatar.jpg").write_bytes(b"FAKE_IMAGE")
         (uploads / "users" / USER_ID / "document.pdf").write_bytes(b"FAKE_PDF")
-        print(f"  ✅  Fichiers utilisateur créés : avatar.jpg, document.pdf")
+        print(f"  Fichiers utilisateur créés : avatar.jpg, document.pdf")
 
         # Backup simulé
         backup_dir = tmp / "backups"
@@ -984,11 +964,11 @@ def run_demo():
             ti   = tarfile.TarInfo(name="app.db")
             ti.size = len(data)
             tar.addfile(ti, io.BytesIO(data))
-        print(f"  ✅  Backup créé : backup_2024-01-15.tar.gz\n")
+        print(f"  Backup créé : backup_2024-01-15.tar.gz\n")
 
         # ── Lancement de l'effacement ──
         print(f"  {'─'*60}")
-        print(f"  🗑️   ÉTAPE 2 : LANCEMENT DE L'EFFACEMENT")
+        print(f"  ÉTAPE 2 : LANCEMENT DE L'EFFACEMENT")
         print(f"  {'─'*60}")
 
         audit  = ErasureAudit(str(tmp / "audit.db"))
@@ -1009,7 +989,7 @@ def run_demo():
 
         # ── Vérifications ──
         print(f"\n  {'─'*60}")
-        print(f"  🔬  ÉTAPE 3 : VÉRIFICATION POST-EFFACEMENT")
+        print(f"  ÉTAPE 3 : VÉRIFICATION POST-EFFACEMENT")
         print(f"  {'─'*60}\n")
 
         # Vérif SQL
@@ -1025,29 +1005,29 @@ def run_demo():
         ).fetchone()[0]
         conn2.close()
 
-        print(f"  Table users    : {'✅ SUPPRIMÉ' if remaining_user == 0 else f'❌ {remaining_user} enreg. restant(s)'}")
-        print(f"  Table sessions : {'✅ SUPPRIMÉ' if remaining_sessions == 0 else f'❌ restant'}")
+        print(f"  Table users    : {'SUPPRIMÉ' if remaining_user == 0 else f'{remaining_user} enreg. restant(s)'}")
+        print(f"  Table sessions : {'SUPPRIMÉ' if remaining_sessions == 0 else 'restant'}")
         if remaining_orders:
-            print(f"  Table orders   : ✅ CONSERVÉ ({remaining_orders} enreg.) — obligation légale 10 ans")
+            print(f"  Table orders   : CONSERVÉ ({remaining_orders} enreg.) — obligation légale 10 ans")
 
         # Vérif JSON
         events_data = json.loads((json_dir / "events_2024.json").read_text())
         user_events = [e for e in events_data
                        if e.get("user_id") == USER_ID]
-        print(f"  JSON events    : {'✅ SUPPRIMÉ' if not user_events else f'❌ {len(user_events)} restant(s)'}")
+        print(f"  JSON events    : {'SUPPRIMÉ' if not user_events else f'{len(user_events)} restant(s)'}")
 
         # Vérif logs
         log_text = (log_dir / "access.log").read_text()
         email_in_log = USER_EMAIL in log_text
-        print(f"  Logs access    : {'❌ email encore présent' if email_in_log else '✅ email redacté'}")
+        print(f"  Logs access    : {'email encore présent' if email_in_log else 'email redacté'}")
 
         # Vérif fichiers
         user_dir = uploads / "users" / USER_ID
-        print(f"  Fichiers user  : {'❌ dossier encore présent' if user_dir.exists() else '✅ SUPPRIMÉ'}")
+        print(f"  Fichiers user  : {'dossier encore présent' if user_dir.exists() else 'SUPPRIMÉ'}")
 
         # ── Résumé ──
         print(f"\n  {'─'*60}")
-        print(f"  📊  RÉSUMÉ DE L'EFFACEMENT")
+        print(f"  RÉSUMÉ DE L'EFFACEMENT")
         print(f"  {'─'*60}\n")
         print(f"  Référence      : {summary['request_id']}")
         print(f"  Enregistrements supprimés : {summary['total_records']}")
@@ -1057,13 +1037,13 @@ def run_demo():
 
         # ── Certificat ──
         print(f"\n  {'─'*60}")
-        print(f"  📜  CERTIFICAT D'EFFACEMENT")
+        print(f"  CERTIFICAT D'EFFACEMENT")
         print(f"  {'─'*60}")
         cert = generate_certificate(summary["request_id"], audit)
         print(cert)
 
         print(f"\n{SEP}")
-        print(f"  ⚖️   CONTEXTE LÉGAL ART. 17 RGPD")
+        print(f"  CONTEXTE LÉGAL ART. 17 RGPD")
         print(f"{SEP}\n")
         print(
             "  Délais légaux :\n"
@@ -1072,10 +1052,10 @@ def run_demo():
             "  Notification     : si impossible, expliquer pourquoi\n"
             "\n"
             "  Exceptions légales conservées (Art. 17 §3) :\n"
-            "  ✅  Commandes/factures — 10 ans (Code de commerce)\n"
-            "  ✅  Logs de sécurité — 6 mois (CNIL)\n"
-            "  ✅  Données fiscales — 6 ans (CGI)\n"
-            "  ✅  Backups — expirent dans 30 jours\n"
+            "  Commandes/factures — 10 ans (Code de commerce)\n"
+            "  Logs de sécurité — 6 mois (CNIL)\n"
+            "  Données fiscales — 6 ans (CGI)\n"
+            "  Backups — expirent dans 30 jours\n"
             "\n"
             "  Risque évité :\n"
             "  Art. 83 §5 : 20M€ ou 4% CA mondial pour refus d'effacement\n"
@@ -1093,7 +1073,6 @@ def run_demo():
 # ================================================================
 
 def main():
-    print(__doc__)
     import argparse
     parser = argparse.ArgumentParser()
     sub    = parser.add_subparsers(dest="cmd")
@@ -1123,20 +1102,20 @@ def main():
 
     if args.cmd == "erase":
         if not args.user_id and not args.email:
-            print("  ❌  Fournir --user-id ou --email")
+            print("  Fournir --user-id ou --email")
             return
         try:
             with open(args.config) as f:
                 config = json.load(f)
         except FileNotFoundError:
-            print(f"  ❌  Config introuvable : {args.config}")
+            print(f"  Config introuvable : {args.config}")
             print("  Créer un fichier JSON avec sql_databases, json_folders, etc.")
             return
         engine  = RightToErasure(audit, dry_run=args.dry_run)
         summary = engine.full_erasure(
             args.user_id, args.email, config, args.requester
         )
-        print(f"\n  ✅  Terminé — Réf : {summary['request_id']}")
+        print(f"\n  Terminé — Réf : {summary['request_id']}")
         print(f"  Hash : {summary['certificate_hash'][:32]}...")
 
     elif args.cmd == "status":
@@ -1147,7 +1126,7 @@ def main():
             print(f"  Demande : {req['requested_at'][:19]}")
             print(f"  Terminé : {(req.get('completed_at') or 'en cours')[:19]}")
         else:
-            print("  ❌  Demande introuvable")
+            print("  Demande introuvable")
 
     elif args.cmd == "cert":
         cert = generate_certificate(args.request_id, audit)

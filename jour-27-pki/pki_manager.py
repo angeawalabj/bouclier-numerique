@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 27 : PKI & CERTIFICATS         ║
-║  Objectif  : Créer et gérer une PKI interne complète           ║
-║  Features  : CA root · CA intermédiaire · Certificats TLS/mTLS ║
-║  Conformité: RFC 5280 · ANSSI RGS · eIDAS                     ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Construit une PKI interne à trois niveaux (CA root, CA intermédiaire, certificats leaf) en pilotant openssl.
+
+Ce script ne réimplémente aucune primitive cryptographique : il orchestre
+la CLI `openssl`, qui reste la référence pour générer des clés RSA, des
+CSR et signer des certificats X.509 dans le bon ordre. L'intérêt d'une
+CA intermédiaire plutôt que de signer les certificats serveur/client
+directement avec la CA root est opérationnel autant que sécuritaire :
+la clé root peut rester hors ligne en production (elle ne sert qu'une
+fois, pour signer l'intermédiaire), alors que l'intermédiaire, exposée
+aux opérations courantes de signature, peut être révoquée et renouvelée
+sans invalider toute la chaîne de confiance. Chaque certificat généré
+porte un SAN (Subject Alternative Name) explicite : le CN seul est
+déprécié depuis la RFC 6125, et les clients TLS modernes l'ignorent.
+Les commandes openssl sont exécutées comme des listes d'arguments
+(pas de `shell=True`) pour éviter qu'un chemin de sortie contrôlé par
+l'appelant ne soit interprété par un shell.
+
+Référence : RFC 5280 (X.509), ANSSI RGS, eIDAS.
 """
 
 import subprocess, json, os, sys, datetime
 from pathlib import Path
 
 def run(cmd, capture=True):
-    r = subprocess.run(cmd, shell=True, capture_output=capture, text=True)
+    """Exécute une commande openssl passée sous forme de liste d'arguments (pas de shell)."""
+    r = subprocess.run(cmd, capture_output=capture, text=True)
     return r.stdout.strip(), r.returncode
 
 def create_pki(base_dir: Path):
@@ -28,31 +40,39 @@ def create_pki(base_dir: Path):
 
     # ── CA Root ──────────────────────────────────────────────────
     print("  [1/4] Génération CA Root (RSA 4096)...")
-    run(f"openssl genrsa -out {base_dir}/ca/ca.key 4096")
-    run(f"""openssl req -new -x509 -days 3650 -key {base_dir}/ca/ca.key \
-         -out {base_dir}/ca/ca.crt \
-         -subj "/C=FR/ST=IDF/O=Bouclier Numerique/CN=Bouclier Root CA" \
-         -extensions v3_ca \
-         -addext "basicConstraints=critical,CA:TRUE" \
-         -addext "keyUsage=critical,keyCertSign,cRLSign" """)
-    print("  ✅  CA Root créée")
+    run(["openssl", "genrsa", "-out", str(base_dir / "ca/ca.key"), "4096"])
+    run([
+        "openssl", "req", "-new", "-x509", "-days", "3650",
+        "-key", str(base_dir / "ca/ca.key"),
+        "-out", str(base_dir / "ca/ca.crt"),
+        "-subj", "/C=FR/ST=IDF/O=Bouclier Numerique/CN=Bouclier Root CA",
+        "-extensions", "v3_ca",
+        "-addext", "basicConstraints=critical,CA:TRUE",
+        "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+    ])
+    print("  CA Root créée")
 
     # ── CA Intermédiaire ─────────────────────────────────────────
     print("  [2/4] Génération CA Intermédiaire (RSA 2048)...")
-    run(f"openssl genrsa -out {base_dir}/intermediate/int.key 2048")
-    run(f"""openssl req -new -key {base_dir}/intermediate/int.key \
-         -out {base_dir}/intermediate/int.csr \
-         -subj "/C=FR/ST=IDF/O=Bouclier Numerique/CN=Bouclier Intermediate CA" """)
-    run(f"""openssl x509 -req -days 1825 \
-         -in {base_dir}/intermediate/int.csr \
-         -CA {base_dir}/ca/ca.crt -CAkey {base_dir}/ca/ca.key \
-         -CAcreateserial -out {base_dir}/intermediate/int.crt \
-         -extfile /tmp/int_ext.cnf""")
-    print("  ✅  CA Intermédiaire créée")
+    run(["openssl", "genrsa", "-out", str(base_dir / "intermediate/int.key"), "2048"])
+    run([
+        "openssl", "req", "-new",
+        "-key", str(base_dir / "intermediate/int.key"),
+        "-out", str(base_dir / "intermediate/int.csr"),
+        "-subj", "/C=FR/ST=IDF/O=Bouclier Numerique/CN=Bouclier Intermediate CA",
+    ])
+    run([
+        "openssl", "x509", "-req", "-days", "1825",
+        "-in", str(base_dir / "intermediate/int.csr"),
+        "-CA", str(base_dir / "ca/ca.crt"), "-CAkey", str(base_dir / "ca/ca.key"),
+        "-CAcreateserial", "-out", str(base_dir / "intermediate/int.crt"),
+        "-extfile", "/tmp/int_ext.cnf",
+    ])
+    print("  CA Intermédiaire créée")
 
     # ── Certificat serveur TLS ───────────────────────────────────
     print("  [3/4] Certificat TLS serveur (localhost + SAN)...")
-    run(f"openssl genrsa -out {base_dir}/certs/server.key 2048")
+    run(["openssl", "genrsa", "-out", str(base_dir / "certs/server.key"), "2048"])
     san_ext = f"""[req]
 distinguished_name=dn
 [dn]
@@ -60,31 +80,41 @@ distinguished_name=dn
 subjectAltName=DNS:localhost,DNS:app.local,IP:127.0.0.1"""
     san_file = base_dir / "certs/san.cnf"
     san_file.write_text(san_ext)
-    run(f"""openssl req -new -key {base_dir}/certs/server.key \
-         -out {base_dir}/certs/server.csr \
-         -subj "/C=FR/O=TechCorp/CN=localhost" \
-         -reqexts SAN -config {san_file}""")
-    run(f"""openssl x509 -req -days 365 \
-         -in {base_dir}/certs/server.csr \
-         -CA {base_dir}/intermediate/int.crt \
-         -CAkey {base_dir}/intermediate/int.key \
-         -CAcreateserial -out {base_dir}/certs/server.crt \
-         -extfile /tmp/san_ext.cnf""")
-    print("  ✅  Certificat TLS serveur créé")
+    run([
+        "openssl", "req", "-new",
+        "-key", str(base_dir / "certs/server.key"),
+        "-out", str(base_dir / "certs/server.csr"),
+        "-subj", "/C=FR/O=TechCorp/CN=localhost",
+        "-reqexts", "SAN", "-config", str(san_file),
+    ])
+    run([
+        "openssl", "x509", "-req", "-days", "365",
+        "-in", str(base_dir / "certs/server.csr"),
+        "-CA", str(base_dir / "intermediate/int.crt"),
+        "-CAkey", str(base_dir / "intermediate/int.key"),
+        "-CAcreateserial", "-out", str(base_dir / "certs/server.crt"),
+        "-extfile", "/tmp/san_ext.cnf",
+    ])
+    print("  Certificat TLS serveur créé")
 
     # ── Certificat client mTLS ───────────────────────────────────
     print("  [4/4] Certificat client mTLS (alice@techcorp.fr)...")
-    run(f"openssl genrsa -out {base_dir}/certs/client_alice.key 2048")
-    run(f"""openssl req -new -key {base_dir}/certs/client_alice.key \
-         -out {base_dir}/certs/client_alice.csr \
-         -subj "/C=FR/O=TechCorp/CN=alice/emailAddress=alice@techcorp.fr" """)
-    run(f"""openssl x509 -req -days 365 \
-         -in {base_dir}/certs/client_alice.csr \
-         -CA {base_dir}/intermediate/int.crt \
-         -CAkey {base_dir}/intermediate/int.key \
-         -CAcreateserial -out {base_dir}/certs/client_alice.crt \
-         -extfile /tmp/client_ext.cnf""")
-    print("  ✅  Certificat client mTLS créé\n")
+    run(["openssl", "genrsa", "-out", str(base_dir / "certs/client_alice.key"), "2048"])
+    run([
+        "openssl", "req", "-new",
+        "-key", str(base_dir / "certs/client_alice.key"),
+        "-out", str(base_dir / "certs/client_alice.csr"),
+        "-subj", "/C=FR/O=TechCorp/CN=alice/emailAddress=alice@techcorp.fr",
+    ])
+    run([
+        "openssl", "x509", "-req", "-days", "365",
+        "-in", str(base_dir / "certs/client_alice.csr"),
+        "-CA", str(base_dir / "intermediate/int.crt"),
+        "-CAkey", str(base_dir / "intermediate/int.key"),
+        "-CAcreateserial", "-out", str(base_dir / "certs/client_alice.crt"),
+        "-extfile", "/tmp/client_ext.cnf",
+    ])
+    print("  Certificat client mTLS créé\n")
 
     # ── Chaîne de confiance ──────────────────────────────────────
     chain_path = base_dir / "certs/chain.crt"
@@ -94,14 +124,20 @@ subjectAltName=DNS:localhost,DNS:app.local,IP:127.0.0.1"""
     )
 
     # Vérification
-    out, rc = run(f"openssl verify -CAfile {base_dir}/ca/ca.crt "
-                  f"-untrusted {base_dir}/intermediate/int.crt "
-                  f"{base_dir}/certs/server.crt")
+    out, rc = run([
+        "openssl", "verify",
+        "-CAfile", str(base_dir / "ca/ca.crt"),
+        "-untrusted", str(base_dir / "intermediate/int.crt"),
+        str(base_dir / "certs/server.crt"),
+    ])
     server_ok = rc == 0
 
-    out2, rc2 = run(f"openssl verify -CAfile {base_dir}/ca/ca.crt "
-                    f"-untrusted {base_dir}/intermediate/int.crt "
-                    f"{base_dir}/certs/client_alice.crt")
+    out2, rc2 = run([
+        "openssl", "verify",
+        "-CAfile", str(base_dir / "ca/ca.crt"),
+        "-untrusted", str(base_dir / "intermediate/int.crt"),
+        str(base_dir / "certs/client_alice.crt"),
+    ])
     client_ok = rc2 == 0
 
     # Rapport
@@ -122,17 +158,17 @@ subjectAltName=DNS:localhost,DNS:app.local,IP:127.0.0.1"""
     )
 
     print(f"  {'─'*56}")
-    print(f"  📦  PKI créée dans {base_dir}/")
-    print(f"  🔐  Chaîne serveur  : {'✅ valide' if server_ok else '❌ invalide'}")
-    print(f"  🔐  Chaîne cliente  : {'✅ valide' if client_ok else '❌ invalide'}")
-    print(f"  📋  Usage mTLS      : -cert {base_dir}/certs/client_alice.crt")
-    print(f"                        -key  {base_dir}/certs/client_alice.key")
-    print(f"                        -cacert {base_dir}/ca/ca.crt")
+    print(f"  PKI créée dans {base_dir}/")
+    print(f"  Chaîne serveur  : {'valide' if server_ok else 'invalide'}")
+    print(f"  Chaîne cliente  : {'valide' if client_ok else 'invalide'}")
+    print(f"  Usage mTLS      : -cert {base_dir}/certs/client_alice.crt")
+    print(f"                    -key  {base_dir}/certs/client_alice.key")
+    print(f"                    -cacert {base_dir}/ca/ca.crt")
     print(f"  {'─'*56}")
     return report
 
 def show_cert_info(cert_path: str):
-    out, _ = run(f"openssl x509 -in {cert_path} -noout -text -nameopt utf8")
+    out, _ = run(["openssl", "x509", "-in", str(cert_path), "-noout", "-text", "-nameopt", "utf8"])
     subject = next((l.strip() for l in out.splitlines() if "Subject:" in l), "?")
     issuer  = next((l.strip() for l in out.splitlines() if "Issuer:" in l), "?")
     dates   = [l.strip() for l in out.splitlines() if "Not " in l]
@@ -144,36 +180,34 @@ def show_cert_info(cert_path: str):
 
 def run_demo():
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 27 : PKI & CERTIFICATS         ║
-╚══════════════════════════════════════════════════════════════════╝
+  PKI & Certificats — Jour 27
 """)
-    out, rc = run("openssl version")
+    out, rc = run(["openssl", "version"])
     if rc != 0:
-        print("  ❌  OpenSSL non disponible"); return
+        print("  OpenSSL non disponible"); return
 
     print(f"  OpenSSL : {out}\n")
     pki_dir = Path("/tmp/bouclier_pki")
     report  = create_pki(pki_dir)
 
-    print("\n  🔍  Informations des certificats créés :\n")
+    print("\n  Informations des certificats créés :\n")
     for label, path in [
         ("CA Root",          report["ca_root"]),
         ("CA Intermédiaire", report["ca_intermediate"]),
         ("Serveur TLS",      report["server_cert"]),
         ("Client mTLS",      report["client_cert"]),
     ]:
-        print(f"  📜  {label}")
+        print(f"  {label}")
         show_cert_info(path)
         print()
 
     print(f"""  Points clés PKI Zero Trust :
 
-  ✅  CA Root hors ligne (air-gapped en prod)
-  ✅  CA Intermédiaire pour signer les leaf certs
-  ✅  SAN obligatoire (CN seul déprécié RFC 6125)
-  ✅  mTLS : client ET serveur s'authentifient
-  ✅  Chaîne de confiance vérifiable
+  - CA Root hors ligne (air-gapped en prod)
+  - CA Intermédiaire pour signer les leaf certs
+  - SAN obligatoire (CN seul déprécié RFC 6125)
+  - mTLS : client ET serveur s'authentifient
+  - Chaîne de confiance vérifiable
 
   Conformité : RFC 5280 · ANSSI RGS · ISO 27001 A.10.1
 """)
