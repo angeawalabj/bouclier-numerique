@@ -17,17 +17,12 @@ suivi des violations Art. 33) et exporte un rapport HTML autonome et
 imprimable — le format généralement demandé lors d'un contrôle CNIL.
 """
 
-import os
-import sys
-import json
-import csv
-import sqlite3
-import hashlib
 import argparse
+import json
+import os
+import sqlite3
+from datetime import date, datetime
 from pathlib import Path
-from datetime import datetime, date
-from typing import Optional
-from collections import defaultdict
 
 # ================================================================
 # RÉFÉRENTIELS CNIL
@@ -204,7 +199,7 @@ class RegistreRGPD:
                              list(data.values()))
             conn.commit()
 
-    def get_organisation(self) -> Optional[dict]:
+    def get_organisation(self) -> dict | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM organisation LIMIT 1").fetchone()
             return dict(row) if row else None
@@ -258,7 +253,7 @@ class RegistreRGPD:
                       f"Champs modifiés : {list(updates.keys())}")
             conn.commit()
 
-    def get_traitement(self, ref: str) -> Optional[dict]:
+    def get_traitement(self, ref: str) -> dict | None:
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM traitements WHERE ref=?", (ref,)
@@ -1038,7 +1033,7 @@ def run_demo(output_html: Path = None):
         print(f"  Traitements  : {len(traitements)}\n")
 
         print(f"  {'─'*60}")
-        print(f"  📋  REGISTRE DES TRAITEMENTS")
+        print("  📋  REGISTRE DES TRAITEMENTS")
         print(f"  {'─'*60}")
         print(f"  {'Réf.':<16} {'Nom':<35} {'Base légale':<22} {'Conservation'}")
         print(f"  {'─'*16} {'─'*35} {'─'*22} {'─'*15}")
@@ -1050,7 +1045,7 @@ def run_demo(output_html: Path = None):
 
         # ── Analyse de conformité ──
         print(f"\n  {'─'*60}")
-        print(f"  📊  VERIFICATION DE CONFORMITE CNIL")
+        print("  📊  VERIFICATION DE CONFORMITE CNIL")
         print(f"  {'─'*60}\n")
 
         conformite = registre.verifier_conformite()
@@ -1065,7 +1060,7 @@ def run_demo(output_html: Path = None):
         print(f"  Score global : [{bar}] {score}/100 — {color_label}")
         print(f"  Points       : {conformite['points']}\n")
 
-        print(f"  Contrôles détaillés :")
+        print("  Contrôles détaillés :")
         for check, value in conformite["checks"].items():
             print(f"    {check.replace('_',' '):<28} {value}")
 
@@ -1078,7 +1073,7 @@ def run_demo(output_html: Path = None):
                     print(f"             → {a['article']}")
 
         if conformite["recommandations"]:
-            print(f"\n  Plan d'action :")
+            print("\n  Plan d'action :")
             for i, r in enumerate(conformite["recommandations"][:5], 1):
                 print(f"    {i}. [{r['priorite']:<8}] {r['action'][:62]}")
                 print(f"              Délai : {r['delai']} · {r['article']}")
@@ -1127,8 +1122,8 @@ def run_demo(output_html: Path = None):
             "  → Rapport prêt en 3 secondes\n"
         )
 
-        print(f"  Sanction possible sans registre :\n"
-              f"  Art. 83 §4 → jusqu'à 10M€ ou 2% CA mondial\n")
+        print("  Sanction possible sans registre :\n"
+              "  Art. 83 §4 → jusqu'à 10M€ ou 2% CA mondial\n")
 
 
 # ================================================================

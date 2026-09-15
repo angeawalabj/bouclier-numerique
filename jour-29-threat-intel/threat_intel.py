@@ -2,12 +2,18 @@
 """Agrège des indicateurs de compromission (IoC) depuis des flux publics
 réels (Feodo Tracker, URLhaus, OpenPhish, CIRCL CVE) dans une base SQLite
 consultable, avec export STIX 2.1/CSV/HTML pour intégration SIEM/EDR."""
-import json, time, hashlib, sqlite3, threading
-import urllib.request, csv, io, re
-from pathlib import Path
+import csv
+import hashlib
+import io
+import json
+import re
+import sqlite3
+import threading
+import time
+import urllib.request
 from datetime import datetime
-from typing import Optional
 from html import escape
+from pathlib import Path
 
 
 class IoC:

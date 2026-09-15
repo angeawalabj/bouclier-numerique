@@ -19,13 +19,13 @@ sont dérivées de ce que les contrôles ont réellement trouvé, pas d'une
 liste pré-écrite.
 """
 
-import sys
 import json
-import time
-import tempfile
 import shutil
-from pathlib import Path
+import sys
+import tempfile
+import time
 from datetime import datetime
+from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATE = Path(__file__).resolve().parent / "rssi_dashboard.html"

@@ -42,23 +42,20 @@ Scénarios disponibles :
   • shared_file      — "Fichier partagé vous attend sur OneDrive"
 """
 
-import os
-import sys
+import argparse
 import csv
+import hashlib
 import json
-import uuid
+import os
 import smtplib
 import sqlite3
-import hashlib
-import argparse
 import threading
 import urllib.parse
-from pathlib import Path
-from datetime import datetime, timedelta
-from collections import defaultdict
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from email.mime.text import MIMEText
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 # Configuration SMTP par variables d'environnement — jamais de secret
 # en dur dans le code. Sans configuration, l'envoi bascule sur une
@@ -628,18 +625,18 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
     SEP = "=" * 62
     lines = [
         f"\n{SEP}",
-        f"  RAPPORT DE SIMULATION DE PHISHING",
+        "  RAPPORT DE SIMULATION DE PHISHING",
         f"  {campaign.get('company','?')} · {campaign.get('name','?')}",
         f"{SEP}",
-        f"",
+        "",
         f"  Campagne    : {campaign_id}",
         f"  Template    : {tpl_name} — {tpl.get('urgency','?')} urgence",
         f"  Date        : {campaign.get('created_at','?')[:10]}",
-        f"",
+        "",
         f"  {'─'*58}",
-        f"  📊  MÉTRIQUES DE LA CAMPAGNE",
+        "  📊  MÉTRIQUES DE LA CAMPAGNE",
         f"  {'─'*58}",
-        f"",
+        "",
         f"  Emails envoyés    : {stats['sent']:>4}",
         f"  Emails ouverts    : {stats['opened']:>4}  ({stats['open_rate']:>3}%)",
     ]
@@ -655,7 +652,7 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
         f"  Liens cliqués     : {stats['clicked']:>4}  ({click_pct:>3}%) {risk_icon}",
         f"  Taux de clic      : [{bar}] {click_pct}%",
         f"  Personnes formées : {stats['educated']:>4}  ({stats['edu_rate']:>3}% des cliqueurs)",
-        f"",
+        "",
     ]
 
     # Évaluation du risque
@@ -674,16 +671,16 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
 
     lines += [
         f"  Niveau de risque  : {risk_icon_full}  {risk}",
-        f"",
+        "",
     ]
 
     # Par département
     if stats["by_dept"]:
         lines += [
             f"  {'─'*58}",
-            f"  🏢  RÉSULTATS PAR DÉPARTEMENT",
+            "  🏢  RÉSULTATS PAR DÉPARTEMENT",
             f"  {'─'*58}",
-            f"",
+            "",
             f"  {'Département':<22} {'Envoyés':>8} {'Cliqués':>8} {'Taux':>8}",
             f"  {'─'*22} {'─'*8} {'─'*8} {'─'*8}",
         ]
@@ -700,9 +697,9 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
     if tpl.get("indicators"):
         lines += [
             f"  {'─'*58}",
-            f"  🔍  INDICATEURS DE PHISHING UTILISÉS",
+            "  🔍  INDICATEURS DE PHISHING UTILISÉS",
             f"  {'─'*58}",
-            f"",
+            "",
         ]
         for ind in tpl["indicators"]:
             lines.append(f"  ⚠️  {ind}")
@@ -711,22 +708,22 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
     # Recommandations
     lines += [
         f"  {'─'*58}",
-        f"  💡  RECOMMANDATIONS",
+        "  💡  RECOMMANDATIONS",
         f"  {'─'*58}",
-        f"",
+        "",
         f"  1. Former les collaborateurs ayant cliqué ({stats['clicked']} personnes)",
-        f"     → Module e-learning : 'Reconnaître un email de phishing'",
-        f"",
-        f"  2. Règles techniques à déployer immédiatement :",
-        f"     → SPF / DKIM / DMARC sur tous les domaines",
-        f"     → Anti-phishing dans le gateway email (ex: Proofpoint)",
-        f"     → Signalement facile (bouton 'Signaler phishing')",
-        f"",
-        f"  3. Rejouer la campagne dans 90 jours pour mesurer le progrès",
-        f"",
-        f"  ANSSI — Guide d'hygiène informatique mesure 42 :",
-        f"  'Sensibiliser les utilisateurs aux risques de l'ingénierie",
-        f"   sociale et du phishing par des tests réguliers.'",
+        "     → Module e-learning : 'Reconnaître un email de phishing'",
+        "",
+        "  2. Règles techniques à déployer immédiatement :",
+        "     → SPF / DKIM / DMARC sur tous les domaines",
+        "     → Anti-phishing dans le gateway email (ex: Proofpoint)",
+        "     → Signalement facile (bouton 'Signaler phishing')",
+        "",
+        "  3. Rejouer la campagne dans 90 jours pour mesurer le progrès",
+        "",
+        "  ANSSI — Guide d'hygiène informatique mesure 42 :",
+        "  'Sensibiliser les utilisateurs aux risques de l'ingénierie",
+        "   sociale et du phishing par des tests réguliers.'",
         f"{SEP}",
     ]
 
@@ -738,7 +735,6 @@ def generate_report(campaign_id: str, tracker: PhishingTracker) -> str:
 # ================================================================
 
 def run_demo():
-    import time
 
     SEP = "=" * 62
     print(f"\n{SEP}")
@@ -755,7 +751,7 @@ def run_demo():
 
     # ── Étape 1 : Afficher les templates disponibles ──
     print(f"  {'─'*60}")
-    print(f"  📧  ÉTAPE 1 : TEMPLATES DISPONIBLES")
+    print("  📧  ÉTAPE 1 : TEMPLATES DISPONIBLES")
     print(f"  {'─'*60}\n")
 
     for name, tpl in EMAIL_TEMPLATES.items():
@@ -766,7 +762,7 @@ def run_demo():
 
     # ── Étape 2 : Créer une campagne ──
     print(f"  {'─'*60}")
-    print(f"  🎯  ÉTAPE 2 : CRÉATION DE LA CAMPAGNE")
+    print("  🎯  ÉTAPE 2 : CRÉATION DE LA CAMPAGNE")
     print(f"  {'─'*60}\n")
 
     camp_id = tracker.create_campaign(
@@ -775,8 +771,8 @@ def run_demo():
         company  = "TechCorp SARL",
     )
     print(f"  Campagne créée : {camp_id}")
-    print(f"  Template       : reset_password")
-    print(f"  Urgence        : haute\n")
+    print("  Template       : reset_password")
+    print("  Urgence        : haute\n")
 
     # Ajouter des destinataires simulés
     targets_data = [
@@ -805,7 +801,7 @@ def run_demo():
             conn.commit()
 
     print(f"  {len(tokens)} destinataires ajoutés")
-    print(f"\n  Emails préparés :")
+    print("\n  Emails préparés :")
     base_url = "http://127.0.0.1:8765"
     for email, dept, token in tokens[:3]:
         print(f"  → {email:<36} [{dept}]")
@@ -814,7 +810,7 @@ def run_demo():
 
     # ── Étape 3 : Simuler des comportements ──
     print(f"  {'─'*60}")
-    print(f"  🎭  ÉTAPE 3 : SIMULATION DE COMPORTEMENTS")
+    print("  🎭  ÉTAPE 3 : SIMULATION DE COMPORTEMENTS")
     print(f"  {'─'*60}\n")
 
     # Définir qui "clique" dans notre simulation
@@ -851,7 +847,7 @@ def run_demo():
 
     # ── Étape 4 : Rapport ──
     print(f"  {'─'*60}")
-    print(f"  📊  ÉTAPE 4 : RAPPORT DE CAMPAGNE")
+    print("  📊  ÉTAPE 4 : RAPPORT DE CAMPAGNE")
     print(f"  {'─'*60}")
 
     report = generate_report(camp_id, tracker)
@@ -859,14 +855,14 @@ def run_demo():
 
     # ── Indicateurs de phishing expliqués ──
     print(f"\n  {'─'*60}")
-    print(f"  🔍  LES 5 INDICATEURS À RECONNAÎTRE")
+    print("  🔍  LES 5 INDICATEURS À RECONNAÎTRE")
     print(f"  {'─'*60}\n")
-    print(f"  Template utilisé : reset_password\n")
+    print("  Template utilisé : reset_password\n")
     for i, ind in enumerate(EMAIL_TEMPLATES["reset_password"]["indicators"], 1):
         print(f"  {i}. {ind}")
 
     print(f"\n  {'─'*60}")
-    print(f"  🖥️   PAGE D'ÉDUCATION")
+    print("  🖥️   PAGE D'ÉDUCATION")
     print(f"  {'─'*60}\n")
     print(
         "  Chaque personne ayant cliqué est redirigée vers\n"

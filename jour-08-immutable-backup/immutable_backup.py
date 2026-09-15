@@ -21,24 +21,18 @@ offre la même garantie sans dépendre d'un attribut de système de
 fichiers local.
 """
 
-import os
-import sys
-import json
-import time
-import stat
-import gzip
 import hashlib
+import json
+import os
 import shutil
-import subprocess
 import sqlite3
+import stat
+import subprocess
+import sys
 import tarfile
-import threading
-import random
-import string
-from pathlib import Path
+import time
 from datetime import datetime, timedelta
-from typing import Optional
-
+from pathlib import Path
 
 # ════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -217,7 +211,7 @@ class ImmutableBackup:
         archive_path = dest_dir / f"{backup_id}.tar.{self.cfg.COMPRESSION}"
 
         # ── Étape 1 : Empreintes sources ──
-        print(f"    Calcul des empreintes sources...")
+        print("    Calcul des empreintes sources...")
         source_checksums = sha256_tree(source)
         file_count = len(source_checksums)
         original_size = sum(
@@ -669,7 +663,7 @@ def run_demo():
 
         total_size = sum(f.stat().st_size for f in source.rglob("*") if f.is_file())
 
-        print(f"  Données de production créées :")
+        print("  Données de production créées :")
         print(f"      {len(data_files)} fichiers · {total_size:,} octets")
         for f in sorted(source.rglob("*")):
             if f.is_file():
@@ -677,17 +671,17 @@ def run_demo():
 
         # ── Étape 1 : Création du backup ──
         print(f"\n  {'─'*60}")
-        print(f"  Étape 1 : création du backup immuable")
+        print("  Étape 1 : création du backup immuable")
         print(f"  {'─'*60}\n")
 
         cfg = BackupConfig()
         cfg.BACKUP_ROOT = tmp / "backups"
         bm = ImmutableBackup(cfg)
 
-        print(f"  Démarrage du backup...")
+        print("  Démarrage du backup...")
         r = bm.create(source, tags={"type": "quotidien", "env": "production"})
 
-        print(f"\n  Backup créé avec succès :")
+        print("\n  Backup créé avec succès :")
         print(f"      ID       : {r['backup_id']}")
         print(f"      Fichiers : {r['file_count']}")
         print(f"      Taille   : {r['original_size']:,} B → {r['archive_size']:,} B "
@@ -732,12 +726,12 @@ def run_demo():
         for f in attack["corrupted_files"]:
             print(f"      - {f}")
 
-        print(f"\n  Contenu après attaque :")
+        print("\n  Contenu après attaque :")
         corrupted_content = list(source.rglob("*.csv"))[0].read_bytes()[:60]
         print(f"      {corrupted_content}")
 
         # Tentative de suppression du backup (rétention active)
-        print(f"\n  Le ransomware tente de supprimer les backups...")
+        print("\n  Le ransomware tente de supprimer les backups...")
         result_del = bm.delete(backup_id, force=False)
         if result_del.get("error"):
             print(f"  Suppression bloquée : {result_del['error']}")
@@ -765,8 +759,8 @@ def run_demo():
         v2 = bm.verify(backup_id)
         sha_ok = v2["checks"].get("sha256_match", True)
         if not sha_ok:
-            print(f"  Archive altérée détectée -> restauration bloquée")
-            print(f"  → En prod : restaurer depuis S3 Object Lock / bande hors-ligne")
+            print("  Archive altérée détectée -> restauration bloquée")
+            print("  → En prod : restaurer depuis S3 Object Lock / bande hors-ligne")
             # Recréer source propre pour simuler backup S3 intact
             clean_source2 = tmp / "clean_src2"
             clean_source2.mkdir()
@@ -783,7 +777,7 @@ def run_demo():
 
         # ── Étape 5 : Restauration ──
         print(f"\n  {'─'*60}")
-        print(f"  🔄  ÉTAPE 5 : RESTAURATION DEPUIS LE BACKUP")
+        print("  🔄  ÉTAPE 5 : RESTAURATION DEPUIS LE BACKUP")
         print(f"  {'─'*60}\n")
 
         res = bm.restore(backup_id, restore)
@@ -792,25 +786,25 @@ def run_demo():
         print(f"  Fichiers : {res['files']}")
 
         # Vérifier que les données sont intactes
-        print(f"\n  Vérification des données restaurées :")
+        print("\n  Vérification des données restaurées :")
         restored_csv = (restore / source.name / "clients" / "base_clients.csv")
         if restored_csv.exists():
             content = restored_csv.read_text(encoding="utf-8")
-            print(f"    clients/base_clients.csv :")
+            print("    clients/base_clients.csv :")
             for line in content.strip().splitlines():
                 print(f"      {line}")
 
         restored_json = (restore / source.name / "comptabilite" / "bilan_2024.json")
         if restored_json.exists():
             bilan = json.loads(restored_json.read_text())
-            print(f"\n    comptabilite/bilan_2024.json :")
+            print("\n    comptabilite/bilan_2024.json :")
             print(f"      CA : {bilan["chiffre_affaires"]:,}€ | Net : {bilan["resultat_net"]:,}€")
 
         # ── Bilan ──
         print(f"\n{SEP}")
         print("  Bilan — protection anti-ransomware")
         print(f"{SEP}")
-        print(f"""
+        print("""
   Avant le backup immuable :
   - attaque ransomware -> 100% des fichiers corrompus
   - option : payer la rançon (65 000€ en moyenne, PME)

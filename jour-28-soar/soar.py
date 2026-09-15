@@ -19,18 +19,15 @@ exercice pédagogique peut simuler honnêtement.
 Conformité : ISO 27001 A.16 · RGPD Art. 33/34 · NIS2 Art. 23
 """
 
+import hashlib
 import json
 import sys
+import threading
 import time
 import uuid
-import re
-import hashlib
-import threading
-import sqlite3
-from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional, Callable
 from collections import defaultdict
+from datetime import datetime, timedelta
+from pathlib import Path
 
 # L'enrichissement IP réutilise la base d'IoC réelle du Jour 29 plutôt
 # que d'inventer une table de réputation par préfixe d'adresse.
@@ -42,7 +39,6 @@ try:
 except ImportError:
     IoCDatabase = None
 from html import escape
-
 
 # ════════════════════════════════════════════════════════════════
 # MODÈLES DE DONNÉES
@@ -263,7 +259,7 @@ class SoarActions:
 
     # ── Enrichissement ───────────────────────────────────────────
 
-    def enrich_ip(self, ip: str, ioc_db_path: Optional[str] = None) -> dict:
+    def enrich_ip(self, ip: str, ioc_db_path: str | None = None) -> dict:
         """
         Enrichissement IP à partir de la base d'indicateurs de
         compromission réelle du Jour 29 (IPs C2 Feodo Tracker, URLs
@@ -334,7 +330,7 @@ class PlaybookEngine:
             "dos_attack":           self._pb_dos,
         }
 
-    def select_playbook(self, alert: Alert) -> Optional[str]:
+    def select_playbook(self, alert: Alert) -> str | None:
         """Sélectionne automatiquement le bon playbook selon le type d'alerte."""
         mapping = {
             "brute_force":       "brute_force",
@@ -588,7 +584,7 @@ class PlaybookEngine:
 # ════════════════════════════════════════════════════════════════
 
 def generate_dashboard(alerts: list[Alert],
-                        output_path: Optional[Path] = None) -> str:
+                        output_path: Path | None = None) -> str:
     """Génère un tableau de bord HTML des incidents traités."""
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
 

@@ -32,20 +32,19 @@ avoir utilisé des sous-traitants sans DPA en bonne et due
 forme, notamment dans le cloud et le marketing.
 """
 
+import hashlib
+import json
 import os
 import sys
-import json
-import hashlib
+from datetime import date, datetime
 from pathlib import Path
-from datetime import datetime, date
-from typing import Optional
 
 try:
     from docx import Document
-    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor
 except ImportError:
     print("Dépendance manquante : pip install python-docx", file=sys.stderr)
     sys.exit(1)

@@ -38,20 +38,15 @@ Conformité :
   ANSSI — Guide de gestion de crise cyber (PACS)
 """
 
-import os
-import sys
-import json
-import sqlite3
-import hashlib
 import argparse
+import sys
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional
 
 try:
     from docx import Document
-    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
 except ImportError:
     print("Dépendance manquante : pip install python-docx", file=sys.stderr)
     sys.exit(1)

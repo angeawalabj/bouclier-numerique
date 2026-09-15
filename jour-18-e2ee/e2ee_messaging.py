@@ -52,29 +52,21 @@ Conformité :
   NIS2 Art. 21 — 'Chiffrement des données en transit et au repos'
 """
 
-import os
-import sys
-import json
 import base64
-import sqlite3
+import json
 import secrets
-import urllib.request
+import sqlite3
 import urllib.error
-from pathlib import Path
+import urllib.request
 from datetime import datetime
-from typing import Optional
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.x25519 import (
-    X25519PrivateKey, X25519PublicKey
-)
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.hmac import HMAC
 from cryptography.exceptions import InvalidTag
-
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # ================================================================
 # PRIMITIVES CRYPTOGRAPHIQUES
@@ -303,7 +295,7 @@ class E2EEServer:
         except Exception:
             return False
 
-    def get_public_key(self, username: str) -> Optional[str]:
+    def get_public_key(self, username: str) -> str | None:
         """Retourne la clé publique d'un utilisateur."""
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
@@ -470,7 +462,7 @@ class E2EERemoteServer:
         })
         return result.get("ok", False)
 
-    def get_public_key(self, username: str) -> Optional[str]:
+    def get_public_key(self, username: str) -> str | None:
         return self._get(f"/pubkey/{username}").get("public_key")
 
     def send_message(self, from_user: str, to_user: str, payload: dict) -> int:
@@ -597,7 +589,7 @@ def run_demo():
 
         # ── Étape 1 : Enregistrement ──
         print(f"  {'─'*60}")
-        print(f"  🔑  ÉTAPE 1 : GÉNÉRATION DES CLÉS (côté clients)")
+        print("  🔑  ÉTAPE 1 : GÉNÉRATION DES CLÉS (côté clients)")
         print(f"  {'─'*60}\n")
 
         alice = E2EEClient("alice", server, str(tmp / "alice.key"))
@@ -608,21 +600,21 @@ def run_demo():
         fp_bob   = bob.register()
         fp_eve   = eve.register()
 
-        print(f"  Alice  — Clé générée localement")
+        print("  Alice  — Clé générée localement")
         print(f"           Empreinte : {fp_alice}")
-        print(f"           ↳ Clé PRIVÉE : stockée sur l'appareil d'Alice")
-        print(f"           ↳ Clé PUBLIQUE : publiée sur le serveur\n")
+        print("           ↳ Clé PRIVÉE : stockée sur l'appareil d'Alice")
+        print("           ↳ Clé PUBLIQUE : publiée sur le serveur\n")
 
-        print(f"  Bob    — Clé générée localement")
+        print("  Bob    — Clé générée localement")
         print(f"           Empreinte : {fp_bob}")
-        print(f"           ↳ Clé PRIVÉE : stockée sur l'appareil de Bob\n")
+        print("           ↳ Clé PRIVÉE : stockée sur l'appareil de Bob\n")
 
-        print(f"  Eve    — Clé générée (attaquante)")
+        print("  Eve    — Clé générée (attaquante)")
         print(f"           Empreinte : {fp_eve}\n")
 
         # ── Étape 2 : Envoi de messages ──
         print(f"  {'─'*60}")
-        print(f"  📨  ÉTAPE 2 : ALICE ENVOIE DES MESSAGES À BOB")
+        print("  📨  ÉTAPE 2 : ALICE ENVOIE DES MESSAGES À BOB")
         print(f"  {'─'*60}\n")
 
         messages = [
@@ -639,16 +631,16 @@ def run_demo():
             # Afficher ce que le serveur voit
             dump = server.dump_database()
             srv_payload = json.loads(dump["messages"][-1]["payload"])
-            print(f"      Serveur voit : {{")
+            print("      Serveur voit : {")
             print(f"        eph_pub    : {srv_payload['eph_pub'][:20]}...")
             print(f"        nonce      : {srv_payload['nonce']}")
             print(f"        ciphertext : {srv_payload['ciphertext'][:32]}...")
-            print(f"      }}")
+            print("      }")
             print()
 
         # ── Étape 3 : Bob déchiffre ──
         print(f"  {'─'*60}")
-        print(f"  🔓  ÉTAPE 3 : BOB DÉCHIFFRE AVEC SA CLÉ PRIVÉE")
+        print("  🔓  ÉTAPE 3 : BOB DÉCHIFFRE AVEC SA CLÉ PRIVÉE")
         print(f"  {'─'*60}\n")
 
         received = bob.receive()
@@ -659,45 +651,45 @@ def run_demo():
 
         # ── Étape 4 : PFS — clés éphémères différentes ──
         print(f"  {'─'*60}")
-        print(f"  🔄  ÉTAPE 4 : PERFECT FORWARD SECRECY (PFS)")
+        print("  🔄  ÉTAPE 4 : PERFECT FORWARD SECRECY (PFS)")
         print(f"  {'─'*60}\n")
 
-        print(f"  Clés éphémères utilisées pour chaque message :")
+        print("  Clés éphémères utilisées pour chaque message :")
         dump = server.dump_database()
         for m in dump["messages"]:
             p  = json.loads(m["payload"])
             print(f"  Message #{m['id']} → eph_pub = {p['eph_pub'][:28]}...")
 
-        print(f"\n  ✅  Chaque message utilise une clé éphémère DIFFÉRENTE")
-        print(f"  ✅  Si la clé privée de Bob est compromise APRÈS envoi,")
-        print(f"      les messages passés restent chiffrés (PFS garantie)\n")
+        print("\n  ✅  Chaque message utilise une clé éphémère DIFFÉRENTE")
+        print("  ✅  Si la clé privée de Bob est compromise APRÈS envoi,")
+        print("      les messages passés restent chiffrés (PFS garantie)\n")
 
         # ── Étape 5 : Ce que voit l'attaquant sur le serveur ──
         print(f"  {'─'*60}")
-        print(f"  👁️   ÉTAPE 5 : VUE D'UN ATTAQUANT AYANT ACCÈS AU SERVEUR")
+        print("  👁️   ÉTAPE 5 : VUE D'UN ATTAQUANT AYANT ACCÈS AU SERVEUR")
         print(f"  {'─'*60}\n")
 
         dump = server.dump_database()
-        print(f"  Base de données du serveur compromise (contenu réel) :\n")
-        print(f"  Table USERS :")
+        print("  Base de données du serveur compromise (contenu réel) :\n")
+        print("  Table USERS :")
         for u in dump["users"]:
             print(f"    {u['username']:<10} pub_key={u['public_key'][:28]}...")
 
-        print(f"\n  Table MESSAGES :")
+        print("\n  Table MESSAGES :")
         for m in dump["messages"]:
             p = json.loads(m["payload"])
             print(f"    #{m['id']} {m['from_user']}→{m['to_user']} | "
                   f"ciphertext={p['ciphertext'][:24]}... [ILLISIBLE]")
 
-        print(f"\n  ❌  L'attaquant voit les métadonnées (qui → qui)")
-        print(f"  ❌  Mais le contenu est un blob de bytes inexploitable\n")
+        print("\n  ❌  L'attaquant voit les métadonnées (qui → qui)")
+        print("  ❌  Mais le contenu est un blob de bytes inexploitable\n")
 
         # ── Étape 6 : Tentative d'usurpation (Eve) ──
         print(f"  {'─'*60}")
-        print(f"  🎭  ÉTAPE 6 : TENTATIVE DE FALSIFICATION (Eve au milieu)")
+        print("  🎭  ÉTAPE 6 : TENTATIVE DE FALSIFICATION (Eve au milieu)")
         print(f"  {'─'*60}\n")
 
-        print(f"  Scénario : Eve intercepte et modifie un message en transit\n")
+        print("  Scénario : Eve intercepte et modifie un message en transit\n")
 
         # Alice envoie un message légitime
         mid = alice.send("bob", "Virement de 10 000€ sur IBAN FR76...")
@@ -730,12 +722,12 @@ def run_demo():
                     print(f"  ⚠️  Bob déchiffre (ne devrait pas marcher) : {pt}")
                 except ValueError as e:
                     print(f"  ✅  Bob reçoit une ERREUR : {e}")
-                    print(f"  ✅  AES-GCM a détecté la falsification !")
-                    print(f"  ✅  Message corrompu rejeté automatiquement\n")
+                    print("  ✅  AES-GCM a détecté la falsification !")
+                    print("  ✅  Message corrompu rejeté automatiquement\n")
 
         # ── Résumé cryptographique ──
         print(f"\n{SEP}")
-        print(f"  🔬  RÉSUMÉ CRYPTOGRAPHIQUE")
+        print("  🔬  RÉSUMÉ CRYPTOGRAPHIQUE")
         print(f"{SEP}\n")
         print(
             "  Protocole :\n"

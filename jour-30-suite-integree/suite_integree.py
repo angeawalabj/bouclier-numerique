@@ -25,13 +25,13 @@ professionnel. Chaque phase tourne en local, sur ce poste ou sur un
 répertoire temporaire créé pour l'occasion.
 """
 
-import sys
-import time
 import shutil
+import sys
 import tempfile
-from pathlib import Path
+import time
 from datetime import datetime
 from html import escape
+from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 
