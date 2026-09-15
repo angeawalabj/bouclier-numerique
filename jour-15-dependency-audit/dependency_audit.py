@@ -812,7 +812,6 @@ def _print_findings(findings: list):
 # ================================================================
 
 def main():
-    print(__doc__)
     parser = argparse.ArgumentParser(
         description="Audit de sécurité des dépendances"
     )

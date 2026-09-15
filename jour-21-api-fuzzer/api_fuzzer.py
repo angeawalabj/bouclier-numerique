@@ -920,7 +920,6 @@ def run_demo():
 # ════════════════════════════════════════════════════════════════
 
 def main():
-    print(__doc__)
     import argparse
     parser = argparse.ArgumentParser(
         description="Fuzzer d'API OWASP — Bouclier Numérique Jour 21",

@@ -806,7 +806,6 @@ def run_demo():
 # ================================================================
 
 def main():
-    print(__doc__)
     parser = argparse.ArgumentParser()
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")

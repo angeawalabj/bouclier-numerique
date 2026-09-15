@@ -850,7 +850,6 @@ Usage :
 """
 
 def main():
-    print(__doc__)
     args = sys.argv[1:]
 
     if not args or args[0] == "demo":

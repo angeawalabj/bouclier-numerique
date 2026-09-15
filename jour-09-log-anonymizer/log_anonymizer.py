@@ -539,7 +539,6 @@ def run_demo():
 # ================================================================
 
 def main():
-    print(__doc__)
     parser = argparse.ArgumentParser(description="Anonymiseur de logs")
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")

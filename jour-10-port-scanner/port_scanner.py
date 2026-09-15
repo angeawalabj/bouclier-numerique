@@ -567,7 +567,6 @@ def run_demo():
 # ================================================================
 
 def main():
-    print(__doc__)
     import argparse
     parser = argparse.ArgumentParser()
     sub    = parser.add_subparsers(dest="cmd")
