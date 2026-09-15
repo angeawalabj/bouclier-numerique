@@ -818,60 +818,27 @@ body {
 // DATA
 // ════════════════════════════════════════════════════════
 
+// Gabarit statique — ces tableaux sont volontairement vides. Ce fichier
+// n'est pas destiné à être ouvert tel quel : lancez `python3
+// rssi_dashboard.py demo` (ou `generate`), qui relit ce gabarit,
+// exécute 4 contrôles réels (réseau, RGPD, intégrité fichiers,
+// dépendances) et régénère un rapport avec les résultats effectifs
+// dans un fichier séparé sous ./output/.
+
 const MODULES = [
-  { id:1,  day:'J01', name:'Coffre-fort',    status:'ok',   metric:'1 247', unit:'secrets', spark:[60,70,72,75,80,78,82], alert:false },
-  { id:2,  day:'J02', name:'EXIF Scrubber',  status:'ok',   metric:'847',   unit:'fichiers purgés', spark:[20,35,28,40,38,45,42], alert:false },
-  { id:3,  day:'J03', name:'HIBP Checker',   status:'warn', metric:'3',     unit:'comptes compromis', spark:[0,0,1,0,2,1,3], alert:true },
-  { id:4,  day:'J04', name:'AES-256 Cifrt',  status:'ok',   metric:'2 341', unit:'fichiers chiffrés', spark:[100,120,180,200,210,230,234], alert:false },
-  { id:5,  day:'J05', name:'Permissions',    status:'warn', metric:'17',    unit:'fichiers 777', spark:[25,22,20,18,20,19,17], alert:true },
-  { id:6,  day:'J06', name:'Rate Limiter',   status:'ok',   metric:'4 281', unit:'req bloquées/j', spark:[800,1200,2100,3000,3800,4100,4281], alert:false },
-  { id:7,  day:'J07', name:'Honeypot',       status:'crit', metric:'14',    unit:'connexions suspectes', spark:[0,1,0,2,1,5,14], alert:true },
-  { id:8,  day:'J08', name:'Backup chiffré', status:'ok',   metric:'47 min',unit:'dernier backup', spark:[60,58,55,52,50,48,47], alert:false },
-  { id:9,  day:'J09', name:'Log Analyzer',   status:'warn', metric:'8',     unit:'anomalies 24h', spark:[1,2,1,3,2,4,8], alert:true },
-  { id:10, day:'J10', name:'Port Scanner',   status:'warn', metric:'3',     unit:'ports critiques ouverts', spark:[5,4,4,3,3,3,3], alert:true },
-  { id:11, day:'J11', name:'Droit à l\'oubli',status:'ok',  metric:'4',     unit:'demandes traitées', spark:[0,1,1,2,2,3,4], alert:false },
-  { id:12, day:'J12', name:'Registre RGPD',  status:'ok',   metric:'86/100',unit:'score conformité', spark:[70,72,76,78,80,84,86], alert:false },
-  { id:13, day:'J13', name:'Data Masking',   status:'ok',   metric:'100%',  unit:'PAN masqués', spark:[100,100,100,100,100,100,100], alert:false },
-  { id:14, day:'J14', name:'Cookie Consent', status:'ok',   metric:'64%',   unit:'taux acceptation', spark:[45,52,58,60,61,63,64], alert:false },
-  { id:15, day:'J15', name:'CVE Audit',      status:'crit', metric:'4',     unit:'CVE critiques', spark:[0,0,2,2,3,3,4], alert:true },
-  { id:16, day:'J16', name:'Phishing Sim',   status:'warn', metric:'67%',   unit:'taux de clic', spark:[80,75,72,70,68,67,67], alert:true },
-  { id:17, day:'J17', name:'HIDS / FIM',     status:'ok',   metric:'847',   unit:'fichiers surveillés', spark:[800,820,830,838,840,844,847], alert:false },
-  { id:18, day:'J18', name:'E2EE Messages',  status:'ok',   metric:'1 284', unit:'messages sécurisés', spark:[100,220,380,600,900,1100,1284], alert:false },
-  { id:19, day:'J19', name:'PCA',            status:'ok',   metric:'4h',    unit:'RTO ransomware', spark:[24,20,16,12,8,6,4], alert:false },
 ];
 
 const SCORE_BREAKDOWN = [
-  { name:'Chiffrement',    score: 94, color:'var(--green)' },
-  { name:'Accès & Auth',   score: 81, color:'var(--green)' },
-  { name:'Réseau',         score: 73, color:'var(--amber)' },
-  { name:'Conformité RGPD',score: 86, color:'var(--green)' },
-  { name:'Détection',      score: 78, color:'var(--amber)' },
-  { name:'Résilience',     score: 88, color:'var(--green)' },
 ];
 
-const GLOBAL_SCORE = Math.round(SCORE_BREAKDOWN.reduce((a,b) => a + b.score, 0) / SCORE_BREAKDOWN.length);
+const GLOBAL_SCORE = SCORE_BREAKDOWN.length
+  ? Math.round(SCORE_BREAKDOWN.reduce((a,b) => a + b.score, 0) / SCORE_BREAKDOWN.length)
+  : 0;
 
 const COMPLIANCE = [
-  { name:'ISO 27001', pct: 82, color:'var(--green)' },
-  { name:'RGPD',      pct: 86, color:'var(--green)' },
-  { name:'PCI-DSS',   pct: 71, color:'var(--amber)' },
-  { name:'NIS2',      pct: 68, color:'var(--amber)' },
-  { name:'ANSSI',     pct: 79, color:'var(--green)' },
 ];
 
 const INITIAL_ALERTS = [
-  { sev:'crit', msg:'Honeypot: 2 connexions SSH anormales (10.0.4.17)', time:'02:47' },
-  { sev:'crit', msg:'CVE critique: pyyaml 5.3.1 → mise à jour requise', time:'01:23' },
-  { sev:'warn', msg:'Phishing sim: taux de clic 67% — formation requise', time:'00:15' },
-  { sev:'warn', msg:'Port 3306 MySQL ouvert sur 192.168.1.31', time:'23:58' },
-  { sev:'warn', msg:'3 comptes dans HIBP — rotation mot de passe', time:'23:12' },
-  { sev:'warn', msg:'17 fichiers avec permissions 777 sur /var/www', time:'22:45' },
-  { sev:'warn', msg:'8 anomalies logs: brute-force SSH (10.0.3.44)', time:'22:01' },
-  { sev:'ok',   msg:'Backup chiffré complété — intégrité vérifiée', time:'21:47' },
-  { sev:'ok',   msg:'1 demande RGPD Art.17 traitée et certifiée', time:'21:03' },
-  { sev:'info', msg:'HIDS: 847 fichiers indexés — baseline OK', time:'20:55' },
-  { sev:'info', msg:'E2EE: 1 284 messages routés — 0 plaintext', time:'20:30' },
-  { sev:'info', msg:'Rate limiter: pic 312 req/s absorbé sans perte', time:'19:44' },
 ];
 
 // ════════════════════════════════════════════════════════
