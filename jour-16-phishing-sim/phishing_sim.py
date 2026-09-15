@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 16 : SIMULATION DE PHISHING       ║
-║  Objectif  : Tester la vigilance des collaborateurs              ║
-║  Méthode   : Email simulé → Tracking clic → Page d'éducation     ║
-║  Éthique   : Usage interne uniquement · Accord DRH obligatoire   ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Simulation de phishing interne : email de test, tracking du clic, page d'éducation.
+
+La version précédente de cet outil générait le contenu de l'email
+(HTML + texte) mais importait MIMEText/MIMEMultipart sans jamais les
+utiliser — il n'y avait aucun code d'envoi réel, malgré un usage
+`launch --send` documenté qui n'existait pas non plus dans le CLI.
+`send_phishing_email()` envoie maintenant réellement via SMTP (config
+par variables d'environnement PHISHING_SMTP_*, repli sur simulation
+console si absentes — même principe que l'alerting du honeypot du
+Jour 7). Le token de tracking et l'email en clair de la cible
+n'existent ensemble qu'au moment de l'ajout : `targets` ne stocke que
+le hachage de l'email, jamais l'adresse elle-même, donc l'envoi se
+fait dans `launch_campaign()` au moment de l'ajout, pas dans une étape
+séparée qui devrait relire une adresse que la base ne garde pas.
 
 Contexte légal et éthique :
   Une simulation de phishing est légale ET recommandée quand :
-  ✅  La direction / DRH a donné son accord écrit
-  ✅  Les employés sont prévenus qu'ils PEUVENT recevoir des tests
-  ✅  Le but est éducatif, pas punitif
-  ✅  Les données de clic sont anonymisées après analyse
-  ✅  Une formation est proposée aux personnes ayant cliqué
+  - La direction / DRH a donné son accord écrit
+  - Les employés sont prévenus qu'ils PEUVENT recevoir des tests
+  - Le but est éducatif, pas punitif
+  - Les données de clic sont anonymisées après analyse
+  - Une formation est proposée aux personnes ayant cliqué
 
   Cadre légal France :
   • ANSSI — Guide d'hygiène informatique (mesure 42)
@@ -37,8 +44,10 @@ Scénarios disponibles :
 
 import os
 import sys
+import csv
 import json
 import uuid
+import smtplib
 import sqlite3
 import hashlib
 import argparse
@@ -50,6 +59,14 @@ from collections import defaultdict
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+# Configuration SMTP par variables d'environnement — jamais de secret
+# en dur dans le code. Sans configuration, l'envoi bascule sur une
+# simulation console (même repli que le honeypot du Jour 7).
+SMTP_HOST = os.environ.get("PHISHING_SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("PHISHING_SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("PHISHING_SMTP_USER", "")
+SMTP_PASS = os.environ.get("PHISHING_SMTP_PASS", "")
 
 
 # ================================================================
@@ -444,6 +461,73 @@ def generate_email_text(template_name: str, tracking_url: str) -> str:
     )
 
 
+def send_phishing_email(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Envoie réellement l'email de simulation via SMTP. Sans les
+    variables PHISHING_SMTP_HOST/PORT/USER/PASS, bascule sur une
+    simulation console plutôt que d'échouer — pour que `demo` reste
+    utilisable sans configuration."""
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASS):
+        print(f"  [SIMULATION] Email vers {to_email} : \"{subject}\" (SMTP non configuré)")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = SMTP_USER
+        msg["To"]      = to_email
+        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        print(f"  Email envoyé : {to_email}")
+        return True
+    except Exception as e:
+        print(f"  Erreur d'envoi vers {to_email} : {e}")
+        return False
+
+
+def launch_campaign(tracker: "PhishingTracker", campaign_id: str,
+                     targets_csv: str, base_url: str, do_send: bool,
+                     company_name: str = "TechCorp SARL") -> list:
+    """Ajoute les cibles d'un fichier CSV (email[,departement] par
+    ligne) à la campagne et envoie (ou simule) l'email de chacune.
+    Le token de tracking et l'email en clair n'existent ensemble qu'à
+    cet instant — seul le hachage de l'email est conservé en base
+    ensuite, donc l'envoi doit se faire ici, pas dans une étape
+    ultérieure qui relirait la base."""
+    campaign = tracker.get_campaign(campaign_id)
+    if not campaign:
+        raise ValueError(f"Campagne introuvable : {campaign_id}")
+
+    results = []
+    with open(targets_csv, newline="", encoding="utf-8") as f:
+        for row in csv.reader(f):
+            if not row or not row[0].strip():
+                continue
+            email = row[0].strip()
+            dept  = row[1].strip() if len(row) > 1 else ""
+
+            token = tracker.add_target(campaign_id, email, dept)
+            tracking_url = f"{base_url}/track/{token}"
+            subject, html = generate_email_html(
+                campaign["template"], tracking_url, {"company_name": company_name}
+            )
+            text = generate_email_text(campaign["template"], tracking_url)
+
+            sent = send_phishing_email(email, subject, html, text) if do_send else False
+            if not do_send:
+                print(f"  [DRY-RUN] {email} <- {tracking_url}")
+            if sent:
+                with sqlite3.connect(tracker.db_path) as conn:
+                    conn.execute("UPDATE targets SET sent_at=? WHERE token=?",
+                                 (datetime.now().isoformat(), token))
+                    conn.commit()
+            results.append({"email": email, "department": dept, "token": token, "sent": sent})
+
+    return results
+
+
 # ================================================================
 # SERVEUR DE TRACKING (HTTP local)
 # ================================================================
@@ -794,15 +878,13 @@ def run_demo():
         "\n"
         "  Usage production :\n"
         "  python3 phishing_sim.py create --template reset_password\n"
-        "  python3 phishing_sim.py add-targets --file targets.csv\n"
-        "  python3 phishing_sim.py launch --send\n"
+        "  python3 phishing_sim.py launch --campaign CAMP-XXXXX --file targets.csv --send\n"
         "  python3 phishing_sim.py report --campaign CAMP-XXXXX\n"
     )
 
 
 def main():
-    print(__doc__)
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Simulation de phishing interne.")
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")
 
@@ -818,6 +900,18 @@ def main():
     p_server = sub.add_parser("server")
     p_server.add_argument("--port", type=int, default=8765)
 
+    p_launch = sub.add_parser(
+        "launch", help="Ajouter les cibles d'un CSV et envoyer (ou simuler) les emails"
+    )
+    p_launch.add_argument("--campaign", required=True)
+    p_launch.add_argument("--file", required=True, help="CSV : email[,departement] par ligne")
+    p_launch.add_argument("--base-url", default="http://127.0.0.1:8765")
+    p_launch.add_argument("--company", default="TechCorp SARL")
+    p_launch.add_argument(
+        "--send", action="store_true",
+        help="Envoyer réellement (nécessite PHISHING_SMTP_*) ; sans ce flag, dry-run",
+    )
+
     args = parser.parse_args()
 
     if not args.cmd or args.cmd == "demo":
@@ -828,13 +922,21 @@ def main():
 
     if args.cmd == "create":
         cid = tracker.create_campaign(args.name, args.template, args.company)
-        print(f"\n  ✅  Campagne créée : {cid}\n")
+        print(f"\n  Campagne créée : {cid}\n")
 
     elif args.cmd == "report":
         print(generate_report(args.campaign, tracker))
 
+    elif args.cmd == "launch":
+        results = launch_campaign(
+            tracker, args.campaign, args.file, args.base_url,
+            do_send=args.send, company_name=args.company,
+        )
+        sent_count = sum(1 for r in results if r["sent"])
+        print(f"\n  {len(results)} cible(s) traitée(s), {sent_count} email(s) réellement envoyé(s)")
+
     elif args.cmd == "server":
-        print(f"\n  🌐  Serveur de tracking démarré sur port {args.port}")
+        print(f"\n  Serveur de tracking démarré sur port {args.port}")
         server = start_tracking_server(args.port, tracker)
         try:
             server.serve_forever()
