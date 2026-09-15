@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 19 : PLAN DE CONTINUITÉ (PCA)    ║
-║  Objectif : Générer les procédures de reprise après incident     ║
-║  Méthode  : RTO/RPO configurables · Checklist par type de panne  ║
-║  Livrable : Plan DOCX prêt-à-imprimer + Matrice de risques       ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Génère un plan de continuité d'activité (PCA) : procédures de reprise
+par type d'incident, matrice RTO/RPO, livrable .docx natif en Python.
+
+La version précédente de cet outil dumpait ses données en JSON dans
+/tmp en promettant qu'un générateur Node.js séparé les transformerait en
+.docx — ce générateur n'a jamais existé dans le dépôt, et la sous-
+commande `generate` documentée n'avait aucune implémentation. Le .docx
+est maintenant produit directement via python-docx (déjà une dépendance
+du projet), sans étape intermédiaire fantôme.
 
 Définitions clés :
   RTO (Recovery Time Objective)   — délai maximal de remise en service
@@ -45,6 +47,14 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
+
+try:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+except ImportError:
+    print("Dépendance manquante : pip install python-docx", file=sys.stderr)
+    sys.exit(1)
 
 
 # ================================================================
@@ -390,7 +400,7 @@ def run_demo():
 
     # ── Matrice de risques ──
     print(f"  {'─'*60}")
-    print(f"  📊  MATRICE DES RISQUES — RTO/RPO PAR SCÉNARIO")
+    print("  Matrice des risques — RTO/RPO par scénario")
     print(f"  {'─'*60}\n")
 
     print(f"  {'Incident':<32} {'Sévérité':<10} {'RTO':>5} {'RPO':>5} {'Impact €'}")
@@ -398,12 +408,9 @@ def run_demo():
 
     for inc_type, pb in INCIDENT_PLAYBOOKS.items():
         impact = calculate_impact(inc_type, company)
-        sev_icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "MODÉRÉ": "🟡"}.get(
-            pb["severity"], "⚪"
-        )
         print(
-            f"  {pb['icon']} {pb['label']:<30} "
-            f"{sev_icon} {pb['severity']:<8} "
+            f"  {pb['label']:<30} "
+            f"{pb['severity']:<8} "
             f"{pb['typical_rto']:>4}h "
             f"{pb['typical_rpo']:>4}h "
             f"{impact['financial_impact']:>10,.0f}€"
@@ -413,7 +420,7 @@ def run_demo():
 
     # ── Procédures détaillées — Ransomware ──
     print(f"  {'─'*60}")
-    print(f"  🔒  PROCÉDURES — RANSOMWARE (scénario prioritaire)")
+    print("  Procédures — ransomware (scénario prioritaire)")
     print(f"  {'─'*60}\n")
 
     playbook = INCIDENT_PLAYBOOKS["ransomware"]
@@ -424,34 +431,31 @@ def run_demo():
     print(f"  Risque CNIL   : {impact['regulatory_risk']}\n")
 
     for phase_key, phase in playbook["phases"].items():
-        print(f"  ⏱️  PHASE {phase_key.upper()} — {phase['title']}")
+        print(f"  Phase {phase_key.upper()} — {phase['title']}")
         print(f"  Objectif : {phase['objective']}\n")
 
         for action in phase["actions"]:
-            prio_icon = {"CRITIQUE": "🔴", "ÉLEVÉ": "🟠", "MODÉRÉ": "🟡"}.get(
-                action["priority"], "⚪"
-            )
-            print(f"  {prio_icon} [{action['id']}] {action['action']}")
+            print(f"  [{action['id']}] {action['action']}")
             print(f"     Responsable : {action['who']}")
             print(f"     Comment     : {action['how']}")
             if action.get("warning"):
-                print(f"     ⚠️  ATTENTION : {action['warning']}")
+                print(f"     Attention : {action['warning']}")
             print()
 
     # ── Leçons apprises ──
     print(f"  {'─'*60}")
-    print(f"  📚  LEÇONS APPRISES (causes racines typiques)")
+    print("  Leçons apprises (causes racines typiques)")
     print(f"  {'─'*60}\n")
     for lesson in playbook["lessons_learned"]:
-        print(f"  ⚠️  {lesson}")
+        print(f"  - {lesson}")
 
-    print(f"\n  🛡️  MESURES PRÉVENTIVES :")
+    print("\n  Mesures préventives :")
     for measure in playbook["prevention"]:
-        print(f"  ✅  {measure}")
+        print(f"  - {measure}")
 
     # ── Cellule de crise ──
     print(f"\n  {'─'*60}")
-    print(f"  📞  CELLULE DE CRISE — {company['name']}")
+    print(f"  Cellule de crise — {company['name']}")
     print(f"  {'─'*60}\n")
     for member in company["crisis_cell"]:
         print(f"  • {member}")
@@ -461,21 +465,18 @@ def run_demo():
 
     # ── Conformité ──
     print(f"\n{SEP}")
-    print(f"  ⚖️   CONFORMITÉ ISO 22301 + ISO 27001 A.17")
+    print("  Conformité ISO 22301 + ISO 27001 A.17")
     print(f"{SEP}\n")
     print(
         "  ISO 22301 — Système de management de la continuité\n"
-        "  ✅  BIA (Business Impact Analysis) documentée\n"
-        "  ✅  Objectifs RTO/RPO définis et testés\n"
-        "  ✅  Procédures de reprise formalisées\n"
-        "  ✅  Exercices de simulation planifiés\n"
+        "  - BIA (Business Impact Analysis) documentée\n"
+        "  - Objectifs RTO/RPO définis et testés\n"
+        "  - Procédures de reprise formalisées\n"
+        "  - Exercices de simulation planifiées\n"
         "\n"
         "  DORA (Digital Operational Resilience Act — 2025) :\n"
         "  Applicable aux entités financières · Délai de notification : 4h\n"
         "  Test de pénétration TLPT obligatoire tous les 3 ans\n"
-        "\n"
-        "  Livrable DOCX généré : pca_techcorp.docx\n"
-        "  Contient : procédures · matrice risques · fiches réflexes\n"
     )
 
     return company
@@ -511,9 +512,93 @@ def build_pca_data(company: dict) -> dict:
     }
 
 
+# ================================================================
+# GÉNÉRATION DU DOCUMENT WORD (python-docx natif)
+# ================================================================
+
+def generate_docx(data: dict, output_path: Path) -> Path:
+    """Construit le PCA en .docx natif à partir des données de build_pca_data()."""
+    output_path = Path(output_path)
+    company = data["company"]
+
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(10.5)
+
+    title = doc.add_heading("PLAN DE CONTINUITÉ D'ACTIVITÉ (PCA)", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    subtitle = doc.add_paragraph(f"{company['name']} — {company.get('sector', '')}")
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    meta = doc.add_paragraph(f"Version {data['version']} · {data['date']}")
+    meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_heading("Matrice des risques — RTO/RPO par scénario", level=1)
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Table Grid"
+    headers = ["Incident", "Sévérité", "RTO", "RPO", "Impact financier estimé"]
+    for cell, text in zip(table.rows[0].cells, headers):
+        run = cell.paragraphs[0].add_run(text)
+        run.bold = True
+    for inc in data["incidents"]:
+        row = table.add_row().cells
+        row[0].text = inc["label"]
+        row[1].text = inc["severity"]
+        row[2].text = f"{inc['rto']}h"
+        row[3].text = f"{inc['rpo']}h"
+        row[4].text = f"{inc['impact']:,.0f}€"
+
+    for inc in data["incidents"]:
+        doc.add_heading(f"Procédures — {inc['label']}", level=1)
+        p = doc.add_paragraph()
+        p.add_run(f"RTO cible : {inc['rto']}h").bold = True
+        p.add_run(f"   ·   RPO cible : {inc['rpo']}h").bold = True
+        p.add_run(f"   ·   Impact estimé : {inc['impact']:,.0f}€")
+
+        for phase_key, phase in inc["phases"].items():
+            doc.add_heading(f"Phase {phase_key.upper()} — {phase['title']}", level=2)
+            doc.add_paragraph(f"Objectif : {phase['objective']}")
+            for action in phase["actions"]:
+                item = doc.add_paragraph(style="List Bullet")
+                item.add_run(f"[{action['id']}] {action['action']}").bold = True
+                doc.add_paragraph(f"Responsable : {action['who']}", style="List Bullet 2")
+                doc.add_paragraph(f"Comment : {action['how']}", style="List Bullet 2")
+                if action.get("warning"):
+                    warn = doc.add_paragraph(style="List Bullet 2")
+                    run = warn.add_run(f"Attention : {action['warning']}")
+                    run.bold = True
+                    run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+
+        doc.add_heading("Leçons apprises", level=2)
+        for lesson in inc["lessons"]:
+            doc.add_paragraph(lesson, style="List Bullet")
+
+        doc.add_heading("Mesures préventives", level=2)
+        for measure in inc["prevention"]:
+            doc.add_paragraph(measure, style="List Bullet")
+
+    doc.add_heading("Cellule de crise", level=1)
+    for member in company.get("crisis_cell", []):
+        doc.add_paragraph(member, style="List Bullet")
+    doc.add_paragraph(f"DPO : {company.get('dpo', '')}")
+    doc.add_paragraph(f"RSSI : {company.get('rssi', '')}")
+
+    doc.add_heading("Conformité", level=1)
+    doc.add_paragraph(
+        "ISO 22301 — BIA documentée, objectifs RTO/RPO définis et testés, "
+        "procédures de reprise formalisées, exercices de simulation planifiés."
+    )
+    doc.add_paragraph(
+        "DORA (Digital Operational Resilience Act, secteur financier UE) : "
+        "délai de notification 4h, test de pénétration TLPT tous les 3 ans."
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(output_path)
+    return output_path
+
+
 def main():
-    print(__doc__)
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Générateur de Plan de Continuité d'Activité (PCA).")
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")
 
@@ -526,11 +611,18 @@ def main():
     if not args.cmd or args.cmd == "demo":
         company = run_demo()
         data = build_pca_data(company)
-        # Sauvegarder en JSON pour le générateur Node.js
-        Path("/tmp/pca_data.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2)
-        )
-        print(f"\n  Données exportées vers /tmp/pca_data.json\n")
+        out = Path("./output/pca_demo.docx")
+        generate_docx(data, out)
+        print(f"  Livrable DOCX généré : {out}\n")
+        return data
+
+    if args.cmd == "generate":
+        company = {"name": args.company, "sector": "", "employees": 0,
+                   "revenue_per_hour": 5000, "dpo": "", "rssi": "", "crisis_cell": []}
+        data = build_pca_data(company)
+        out = Path(args.output)
+        generate_docx(data, out)
+        print(f"  PCA généré : {out}")
         return data
 
     return None
