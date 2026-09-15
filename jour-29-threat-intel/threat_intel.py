@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Bouclier Numerique - Jour 29 : Threat Intelligence Feed"""
+"""Agrège des indicateurs de compromission (IoC) depuis des flux publics
+réels (Feodo Tracker, URLhaus, OpenPhish, CIRCL CVE) dans une base SQLite
+consultable, avec export STIX 2.1/CSV/HTML pour intégration SIEM/EDR."""
 import json, time, hashlib, sqlite3, threading
 import urllib.request, csv, io, re
 from pathlib import Path

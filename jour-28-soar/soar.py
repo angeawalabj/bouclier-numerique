@@ -1,38 +1,26 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 28 : SOAR                      ║
-║  Objectif  : Automatiser la réponse aux incidents de sécurité  ║
-║  Modèle    : Playbook engine · Actions · Enrichissement        ║
-║  SOAR      : Security Orchestration, Automation & Response     ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Moteur de playbooks SOAR : sélectionne et exécute une réponse selon le type d'alerte.
 
-Problème : Un SOC reçoit en moyenne 11 000 alertes/jour.
-Sans automatisation, les analystes passent 45% du temps
-sur des faux positifs et des tâches répétitives.
-
-Le SOAR automatise la réponse selon des playbooks :
-
-  Alerte détectée → Playbook sélectionné → Actions exécutées
-        ↓                                         ↓
-  brute_force             bloquer_ip + notifier + créer_ticket
-  phishing                quarantaine + reset_mdp + notifier
-  malware                 isoler_machine + snapshot + escalader
-  data_exfil              couper_connexion + notifier_dpo_rgpd
-  credential_stuffing     bloquer_ip + invalider_sessions + mfa_force
-
-Chaque playbook :
-  - Enrichit l'alerte (géoloc IP, réputation, contexte)
-  - Exécute des actions automatiques (DENY, block, quarantine)
-  - Génère des preuves pour l'investigation
-  - Notifie les bonnes personnes
-  - Met à jour le ticket ITSM
-  - Documente pour la conformité RGPD (Art. 33 : 72h)
+Un SOC qui reçoit des milliers d'alertes par jour ne peut pas se permettre
+qu'un analyste ouvre chaque ticket pour décider manuellement quoi faire —
+la plupart des réponses (bloquer une IP en brute force, mettre en
+quarantaine un compte phishé, isoler une machine infectée) suivent un
+schéma répétitif que le temps de réaction, pas le jugement, détermine.
+Ce moteur encode ces schémas en playbooks : chaque type d'alerte
+déclenche une séquence fixe d'actions (blocage, verrouillage,
+notification, ticket), enrichie par une vraie consultation de la base
+d'IoC du Jour 29 plutôt qu'une donnée de réputation inventée. Les
+actions elles-mêmes (block_ip, quarantine_host...) restent des stubs
+qui journalisent l'intention sans appeler d'API réelle de pare-feu/EDR —
+brancher un vrai adaptateur derrière chaque action est le travail
+d'intégration propre à chaque infrastructure, pas quelque chose qu'un
+exercice pédagogique peut simuler honnêtement.
 
 Conformité : ISO 27001 A.16 · RGPD Art. 33/34 · NIS2 Art. 23
 """
 
 import json
+import sys
 import time
 import uuid
 import re
@@ -43,6 +31,16 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Callable
 from collections import defaultdict
+
+# L'enrichissement IP réutilise la base d'IoC réelle du Jour 29 plutôt
+# que d'inventer une table de réputation par préfixe d'adresse.
+_THREAT_INTEL_DIR = Path(__file__).resolve().parent.parent / "jour-29-threat-intel"
+if str(_THREAT_INTEL_DIR) not in sys.path:
+    sys.path.insert(0, str(_THREAT_INTEL_DIR))
+try:
+    from threat_intel import IoCDatabase
+except ImportError:
+    IoCDatabase = None
 from html import escape
 
 
@@ -265,52 +263,49 @@ class SoarActions:
 
     # ── Enrichissement ───────────────────────────────────────────
 
-    def enrich_ip(self, ip: str) -> dict:
+    def enrich_ip(self, ip: str, ioc_db_path: Optional[str] = None) -> dict:
         """
-        Enrichissement IP : réputation, géoloc, ASN.
-        En production : appel VirusTotal, AbuseIPDB, ipapi...
-        Ici : simulation basée sur les plages d'IP.
+        Enrichissement IP à partir de la base d'indicateurs de
+        compromission réelle du Jour 29 (IPs C2 Feodo Tracker, URLs
+        malveillantes URLhaus/OpenPhish) — pas d'une table de réputation
+        géographique inventée par préfixe d'adresse. Une IP absente de
+        cette base locale n'a pas été *lavée* de tout soupçon pour
+        autant : ça veut seulement dire qu'aucune des sources agrégées
+        ne l'a signalée, ce qui est très différent d'une vérification
+        positive de bonne réputation (les feeds gratuits couvrent une
+        fraction de l'espace IP malveillant réel).
         """
-        time.sleep(0.05)  # simule latence API
-        # Simulation de réputation basée sur l'IP
-        parts = ip.split(".")
-        if len(parts) != 4:
-            return {}
-
-        # IPs "suspectes" dans la démo
-        suspicious_ranges = {"185", "45", "194", "91"}
-        first_octet = parts[0]
-
         base = {
-            "ip": ip, "country": "Unknown", "city": "Unknown",
-            "asn": "AS12345", "org": "Unknown ISP",
-            "reputation_score": 0,   # 0–100, 100 = malveillant
-            "abuse_reports": 0,
-            "is_tor": False, "is_vpn": False, "is_proxy": False,
+            "ip": ip,
+            "is_private": ip.startswith(("192.168.", "10.", "172.")),
+            "known_malicious": False,
+            "source": None,
+            "reputation_score": 0,   # 0-100, dérivé de la confiance IoC réelle si trouvé
+            "tags": [],
+            "note": None,
         }
+        if base["is_private"]:
+            base["note"] = "Adresse privée — hors périmètre des feeds de threat intel publics."
+            return base
 
-        if first_octet in suspicious_ranges:
-            base.update({
-                "country": "RU", "city": "Moscow",
-                "asn": "AS60781", "org": "LeaseWeb Netherlands B.V.",
-                "reputation_score": 85,
-                "abuse_reports": 47,
-                "is_vpn": True,
-            })
-        elif ip.startswith("192.168") or ip.startswith("10.") or ip.startswith("172."):
-            base.update({
-                "country": "Internal", "city": "LAN",
-                "asn": "Internal", "org": "Réseau interne",
-                "reputation_score": 0,
-            })
-        else:
-            base.update({
-                "country": "FR", "city": "Paris",
-                "asn": "AS12322", "org": "Free SAS",
-                "reputation_score": 10,
-                "abuse_reports": 0,
-            })
+        if IoCDatabase is None:
+            base["note"] = "Module threat_intel (Jour 29) indisponible — enrichissement désactivé."
+            return base
 
+        db_path = ioc_db_path or str(_THREAT_INTEL_DIR / "ti.db")
+        if not Path(db_path).exists():
+            base["note"] = f"Base IoC introuvable ({db_path}) — lancer 'threat_intel.py collect' pour la peupler."
+            return base
+
+        found = IoCDatabase(db_path).lookup(ip)
+        if found:
+            base.update({
+                "known_malicious": True,
+                "source": found["source"],
+                "reputation_score": int(found["confidence"]),
+                "tags": found["tags"],
+                "note": f"Sévérité {found['severity']} — {found['hit_count']} détection(s)",
+            })
         return base
 
 
@@ -632,7 +627,7 @@ def generate_dashboard(alerts: list[Alert],
 <html lang="fr">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>🛡️ SOAR Dashboard</title>
+  <title>SOAR Dashboard</title>
   <style>
     :root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
     *{{box-sizing:border-box;margin:0;padding:0}}
@@ -666,7 +661,7 @@ def generate_dashboard(alerts: list[Alert],
     <div class="kpi"><div class="kpi-val" style="color:#3498db">{rgpd_count}</div><div class="kpi-label">Notif. RGPD Art.33</div></div>
   </div>
 
-  <div class="section">📋 Journal des incidents</div>
+  <div class="section">Journal des incidents</div>
   <table>
     <thead>
       <tr><th>ID</th><th>Heure</th><th>Sévérité</th><th>Type</th><th>IP Source</th><th>Playbook</th><th>Actions</th><th>Statut</th><th>Ticket</th><th>Durée</th></tr>
@@ -690,12 +685,7 @@ def generate_dashboard(alerts: list[Alert],
 # ════════════════════════════════════════════════════════════════
 
 def run_demo():
-    print("""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 28 : SOAR                      ║
-║  Security Orchestration, Automation & Response                 ║
-╚══════════════════════════════════════════════════════════════════╝
-""")
+    print("\n  Démo SOAR — Security Orchestration, Automation & Response\n")
 
     actions = SoarActions()
     engine  = PlaybookEngine(actions)
@@ -749,14 +739,14 @@ def run_demo():
 
     total_actions = sum(len(a.actions) for a in treated)
     avg_ms = sum(a.duration_s for a in treated) / len(treated) * 1000
-    print(f"\n  ✅  {len(treated)} incidents traités automatiquement")
-    print(f"  ⚡  Temps moyen de réponse : {avg_ms:.0f}ms")
-    print(f"  🎬  Actions totales exécutées : {total_actions}")
-    print(f"  📋  Notifications RGPD Art.33 : {sum(1 for a in treated if a.rgpd_notif)}")
+    print(f"\n  {len(treated)} incidents traités automatiquement")
+    print(f"  Temps moyen de réponse : {avg_ms:.0f}ms")
+    print(f"  Actions totales exécutées : {total_actions}")
+    print(f"  Notifications RGPD Art.33 : {sum(1 for a in treated if a.rgpd_notif)}")
 
     report_path = Path("/tmp/soar_dashboard.html")
     generate_dashboard(treated, report_path)
-    print(f"\n  📄  Dashboard → {report_path}")
+    print(f"\n  Dashboard → {report_path}")
 
     print("""
   ─────────────────────────────────────────────────────────
@@ -766,9 +756,9 @@ def run_demo():
     ticket ITSM, révocation sessions — tout en une passe.
 
   Conformité automatisée :
-  → RGPD Art.33 : DPO notifié dans les 72h ✅
-  → ISO 27001 A.16.1.5 : réponse documentée ✅
-  → NIS2 Art.23 : incident enregistré ✅
+  → RGPD Art.33 : DPO notifié dans les 72h
+  → ISO 27001 A.16.1.5 : réponse documentée
+  → NIS2 Art.23 : incident enregistré
   ─────────────────────────────────────────────────────────
 """)
 
