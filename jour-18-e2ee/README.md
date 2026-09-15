@@ -1,20 +1,11 @@
-# 🔒 Jour 18 — Messagerie Chiffrée de Bout en Bout (E2EE)
+# Jour 18 — Messagerie Chiffrée de Bout en Bout (E2EE)
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python)
-![Protocol](https://img.shields.io/badge/Protocol-X25519%20·%20HKDF%20·%20AES--256--GCM-00e5a0?style=flat-square)
-![PFS](https://img.shields.io/badge/PFS-Perfect%20Forward%20Secrecy-f5a623?style=flat-square)
-![ZK](https://img.shields.io/badge/Server-Zero--Knowledge-blue?style=flat-square)
-
-**Le serveur stocke les messages mais ne peut JAMAIS les lire.**  
-Inspiré du protocole Signal · PFS · Authentification intégrée
-
-</div>
+Python 3.10+. X25519 + HKDF + AES-256-GCM, inspiré du protocole Signal.
+Le serveur stocke les messages mais ne peut jamais les lire.
 
 ---
 
-## 🎯 Problème résolu
+## Problème résolu
 
 Dans la plupart des messageries d'entreprise (Slack, Teams sans E2EE, email), **le serveur voit tout** : il peut lire, modifier, transmettre aux autorités ou être compromis. L'E2EE garantit que le chiffrement se fait *avant* l'envoi, avec des clés que le serveur ne possède jamais.
 
@@ -33,7 +24,7 @@ Messagerie E2EE :
 
 ---
 
-## 🔬 Protocole cryptographique
+## Protocole cryptographique
 
 ### Étapes d'un envoi (Alice → Bob)
 
@@ -59,27 +50,43 @@ Messagerie E2EE :
 
 ---
 
-## ⚡ Démarrage rapide
+## Démarrage rapide
 
 ```bash
 pip install cryptography
 
-# Démo complète (6 scénarios)
+# Démo complète (6 scénarios), tout en local
 python e2ee_messaging.py demo
-
-# Enregistrer un utilisateur
-python e2ee_messaging.py register alice
-
-# Envoyer un message
-python e2ee_messaging.py send alice bob "Message confidentiel"
-
-# Déchiffrer ses messages
-python e2ee_messaging.py receive bob
 ```
+
+### Sur deux machines différentes
+
+Le relais HTTP ne voit que des clés publiques et des blobs chiffrés —
+jamais une clé privée ni un texte en clair (`send_message`/`get_public_key`
+sont ses seules opérations, comparer `e2ee_messaging.py` pour le détail).
+
+```bash
+# Sur le serveur (ou une machine accessible des deux correspondants)
+python e2ee_messaging.py server --port 8766
+
+# Sur le poste d'Alice
+python e2ee_messaging.py register alice --server-url http://IP_SERVEUR:8766
+python e2ee_messaging.py send alice bob "Message confidentiel" \
+  --server-url http://IP_SERVEUR:8766
+
+# Sur le poste de Bob
+python e2ee_messaging.py register bob --server-url http://IP_SERVEUR:8766
+python e2ee_messaging.py receive bob --server-url http://IP_SERVEUR:8766
+```
+
+Sans `--server-url`, `register`/`send`/`receive` utilisent une base
+SQLite locale (`--db`, par défaut `/tmp/e2ee_server.db`) — pratique pour
+tester le protocole sur une seule machine, mais ne remplace pas un
+vrai relais entre deux correspondants distants.
 
 ---
 
-## 🧪 Ce que prouve la démo
+## Ce que prouve la démo
 
 ### 1. Chiffrement effectif — le serveur ne voit que des bytes
 
@@ -114,7 +121,7 @@ Si la clé privée de Bob est compromise dans 6 mois, les messages passés **res
 
 ---
 
-## 📦 Structure des messages
+## Structure des messages
 
 ```json
 {
@@ -132,7 +139,7 @@ Si la clé privée de Bob est compromise dans 6 mois, les messages passés **res
 
 ---
 
-## 🔑 Gestion des clés
+## Gestion des clés
 
 ```
 Clé d'identité (long terme)
@@ -149,7 +156,7 @@ Clé éphémère (par message)
 
 ---
 
-## ⚖️ Conformité
+## Conformité
 
 | Référentiel | Exigence couverte |
 |------------|-----------------|
@@ -160,7 +167,7 @@ Clé éphémère (par message)
 
 ---
 
-## 🔗 Ressources
+## Ressources
 
 - [Signal Protocol Specification](https://signal.org/docs/)
 - [RFC 7748 — X25519](https://datatracker.ietf.org/doc/html/rfc7748)
@@ -169,4 +176,4 @@ Clé éphémère (par message)
 
 ---
 
-_Partie du challenge [🛡️ Le Bouclier Numérique](../README.md) — Jour 18/30_
+_Partie du challenge [Le Bouclier Numérique](../README.md) — Jour 18/30_

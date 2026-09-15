@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""
-╔══════════════════════════════════════════════════════════════════╗
-║  🛡️  BOUCLIER NUMÉRIQUE — JOUR 18 : CHIFFREMENT DE BOUT EN BOUT  ║
-║  Protocole : ECDH (X25519) + HKDF + AES-256-GCM                 ║
-║  Garantie  : Le serveur ne peut JAMAIS lire les messages         ║
-║  Standard  : Inspiré du protocole Signal (Double Ratchet-lite)  ║
-╚══════════════════════════════════════════════════════════════════╝
+"""Messagerie chiffrée de bout en bout : X25519 + HKDF + AES-256-GCM, relais HTTP.
+
+La version précédente de ce fichier avait un cœur cryptographique
+correct (PFS réelle, AEAD réel) mais aucun transport : `E2EEServer`
+n'était qu'une classe SQLite locale, et le CLI `send`/`receive`
+ouvrait cette même base en local à chaque appel — deux personnes sur
+deux machines différentes ne pouvaient jamais échanger de message,
+malgré le nom de l'outil. `E2EEServer` expose maintenant aussi une API
+HTTP minimale (`server --port`) et `E2EERemoteServer` reproduit
+exactement son interface (register/get_public_key/send_message/
+get_all_messages) en l'appelant à distance via urllib — un `E2EEClient`
+n'a donc aucune idée de si son "serveur" est local ou distant, seul le
+CLI choisit lequel instancier selon `--server-url`.
 
 Qu'est-ce que l'E2EE ?
   Dans une messagerie ordinaire (WhatsApp sans E2EE, email, Slack) :
@@ -29,10 +35,10 @@ Protocole implémenté :
   4. Bob déchiffre avec sa clé privée
 
   Propriétés cryptographiques :
-  ✅  Perfect Forward Secrecy (PFS) — clé éphémère différente à chaque message
-  ✅  Authentification intégrée — AES-GCM détecte toute falsification
-  ✅  Zero-knowledge serveur — serveur ne voit jamais plaintext ni clés privées
-  ✅  Résistance aux attaques de replay — nonce aléatoire 96 bits
+  - Perfect Forward Secrecy (PFS) — clé éphémère différente à chaque message
+  - Authentification intégrée — AES-GCM détecte toute falsification
+  - Zero-knowledge serveur — serveur ne voit jamais plaintext ni clés privées
+  - Résistance aux attaques de replay — nonce aléatoire 96 bits
 
 Pourquoi ECDH plutôt que RSA ?
   - Clés 100x plus courtes pour sécurité équivalente
@@ -47,13 +53,17 @@ Conformité :
 """
 
 import os
+import sys
 import json
 import base64
 import sqlite3
 import secrets
+import urllib.request
+import urllib.error
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
@@ -365,6 +375,113 @@ class E2EEServer:
 
 
 # ================================================================
+# TRANSPORT HTTP — relie deux E2EEClient sur des machines différentes
+# ================================================================
+
+class E2EEHTTPHandler(BaseHTTPRequestHandler):
+    """Expose un E2EEServer sur HTTP. Ne voit jamais de clé privée ni
+    de texte en clair — uniquement des clés publiques et des blobs
+    chiffrés opaques, exactement ce que voit déjà E2EEServer en local."""
+
+    server_version = "E2EERelay/1.0"
+
+    def _json(self, status: int, data: dict) -> None:
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    def do_POST(self):
+        store: E2EEServer = self.server.e2ee_store
+        try:
+            if self.path == "/register":
+                data = self._read_json()
+                ok = store.register(data["username"], data["public_key"], data.get("fingerprint", ""))
+                self._json(200, {"ok": ok})
+            elif self.path == "/send":
+                data = self._read_json()
+                mid = store.send_message(data["from_user"], data["to_user"], data["payload"])
+                self._json(200, {"ok": True, "id": mid})
+            else:
+                self._json(404, {"error": "not found"})
+        except Exception as e:
+            self._json(400, {"error": str(e)})
+
+    def do_GET(self):
+        store: E2EEServer = self.server.e2ee_store
+        try:
+            if self.path.startswith("/pubkey/"):
+                username = self.path.removeprefix("/pubkey/")
+                pub = store.get_public_key(username)
+                self._json(200, {"public_key": pub} if pub else {"public_key": None})
+            elif self.path.startswith("/messages/"):
+                username = self.path.removeprefix("/messages/")
+                self._json(200, {"messages": store.get_all_messages(username)})
+            else:
+                self._json(404, {"error": "not found"})
+        except Exception as e:
+            self._json(400, {"error": str(e)})
+
+    def log_message(self, fmt, *args):
+        pass  # silencieux — évite de polluer stdout pendant la démo
+
+
+def start_e2ee_server(port: int = 8766, db_path: str = "/tmp/e2ee_server.db") -> HTTPServer:
+    """Démarre le relais HTTP. Bloquant — appeler .serve_forever() dessus,
+    ou le lancer dans un thread pour un usage programmatique/démo."""
+    httpd = HTTPServer(("127.0.0.1", port), E2EEHTTPHandler)
+    httpd.e2ee_store = E2EEServer(db_path)
+    return httpd
+
+
+class E2EERemoteServer:
+    """Reproduit exactement l'interface de E2EEServer (les 4 méthodes
+    que E2EEClient appelle) mais parle à un relais HTTP distant plutôt
+    qu'à un fichier SQLite local — un E2EEClient ne voit aucune
+    différence entre les deux."""
+
+    def __init__(self, base_url: str, timeout: float = 5.0):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _post(self, path: str, data: dict) -> dict:
+        body = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}{path}", data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            return json.loads(r.read())
+
+    def _get(self, path: str) -> dict:
+        req = urllib.request.Request(f"{self.base_url}{path}")
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            return json.loads(r.read())
+
+    def register(self, username: str, public_key_b64: str, fingerprint: str = "") -> bool:
+        result = self._post("/register", {
+            "username": username, "public_key": public_key_b64, "fingerprint": fingerprint,
+        })
+        return result.get("ok", False)
+
+    def get_public_key(self, username: str) -> Optional[str]:
+        return self._get(f"/pubkey/{username}").get("public_key")
+
+    def send_message(self, from_user: str, to_user: str, payload: dict) -> int:
+        result = self._post("/send", {"from_user": from_user, "to_user": to_user, "payload": payload})
+        return result.get("id", 0)
+
+    def get_all_messages(self, username: str) -> list:
+        return self._get(f"/messages/{username}").get("messages", [])
+
+
+# ================================================================
 # CLIENT (détient la clé privée)
 # ================================================================
 
@@ -653,27 +770,39 @@ def run_demo():
 # CLI
 # ================================================================
 
-def main():
-    import argparse, tempfile
+def _make_server(args):
+    """Local (--db) par défaut ; distant (--server-url) si fourni —
+    E2EEClient ne fait aucune différence entre les deux."""
+    if getattr(args, "server_url", None):
+        return E2EERemoteServer(args.server_url)
+    return E2EEServer(args.db)
 
-    print(__doc__)
-    parser = argparse.ArgumentParser()
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Messagerie E2EE — X25519 + HKDF + AES-256-GCM.")
     sub    = parser.add_subparsers(dest="cmd")
     sub.add_parser("demo")
 
-    p_reg = sub.add_parser("register")
-    p_reg.add_argument("username")
-    p_reg.add_argument("--db", default="/tmp/e2ee_server.db")
+    p_server = sub.add_parser("server", help="Démarrer le relais HTTP (aveugle au contenu des messages)")
+    p_server.add_argument("--port", type=int, default=8766)
+    p_server.add_argument("--db", default="/tmp/e2ee_server.db")
 
-    p_send = sub.add_parser("send")
-    p_send.add_argument("from_user")
-    p_send.add_argument("to_user")
-    p_send.add_argument("message")
-    p_send.add_argument("--db", default="/tmp/e2ee_server.db")
-
-    p_recv = sub.add_parser("receive")
-    p_recv.add_argument("username")
-    p_recv.add_argument("--db", default="/tmp/e2ee_server.db")
+    for name in ("register", "send", "receive"):
+        p = sub.add_parser(name)
+        p.add_argument("--db", default="/tmp/e2ee_server.db",
+                        help="Base locale (ignoré si --server-url est fourni)")
+        p.add_argument("--server-url", default=None,
+                        help="Relais distant, ex: http://autre-machine:8766")
+        if name == "register":
+            p.add_argument("username")
+        elif name == "send":
+            p.add_argument("from_user")
+            p.add_argument("to_user")
+            p.add_argument("message")
+        elif name == "receive":
+            p.add_argument("username")
 
     args = parser.parse_args()
 
@@ -681,17 +810,26 @@ def main():
         run_demo()
         return
 
-    server = E2EEServer(args.db)
+    if args.cmd == "server":
+        httpd = start_e2ee_server(args.port, args.db)
+        print(f"\n  Relais E2EE démarré sur http://127.0.0.1:{args.port}")
+        print("  Ce serveur ne voit que des clés publiques et des blobs chiffrés opaques.\n")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\n  Serveur arrêté.")
+        return
+
+    server = _make_server(args)
 
     if args.cmd == "register":
         client = E2EEClient(args.username, server)
         fp     = client.register()
-        print(f"\n  ✅  {args.username} enregistré")
+        print(f"\n  {args.username} enregistré")
         print(f"  Empreinte : {fp}\n")
 
     elif args.cmd == "send":
         client = E2EEClient(args.from_user, server)
-        # Charger clé si existante
         key_file = Path(f"/tmp/e2ee_{args.from_user}.key")
         if key_file.exists():
             from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -699,7 +837,7 @@ def main():
                 key_file.read_bytes(), password=None
             )
         mid = client.send(args.to_user, args.message)
-        print(f"\n  ✅  Message #{mid} envoyé (chiffré)\n")
+        print(f"\n  Message #{mid} envoyé (chiffré)\n")
 
     elif args.cmd == "receive":
         client = E2EEClient(args.username, server)
