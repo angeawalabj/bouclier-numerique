@@ -24,7 +24,7 @@ La cybersécurité s'enseigne souvent en théorie — slides, normes, acronymes,
 
 Ce challenge part d'un principe différent : **chaque concept de sécurité doit produire un outil qui fonctionne le jour où on l'apprend.**
 
-30 jours, 30 outils. Chacun répond à un problème concret rencontré par une équipe IT, un RSSI ou un DPO — pas une démonstration jouet, un script qu'on peut réellement lancer sur son propre poste, sa propre API, son propre registre de traitements. Là où un outil ne pouvait raisonnablement pas être testé en conditions réelles (parler à un vrai serveur distant, par exemple), le mode `demo` le dit explicitement plutôt que de simuler un résultat.
+30 jours, 30 outils. Chacun répond à un problème concret rencontré par une équipe IT, un RSSI ou un DPO , un script qu'on peut réellement lancer sur son propre poste, sa propre API, son propre registre de traitements. Là où un outil ne pouvait raisonnablement pas être testé en conditions réelles (parler à un vrai serveur distant, par exemple), le mode `demo` le dit explicitement.
 
 **Ce que couvre le challenge :**
 - Cryptographie appliquée — AES-256-GCM, X25519, HKDF, scrypt
@@ -161,8 +161,7 @@ commandes pour un usage réel au-delà du mode démo.
 | **PCI-DSS** | 3.4, 6.3.3, 10.5.5 |
 | **NIS2** | Art. 21 — chiffrement, résilience |
 
-Pas de score de conformité global ici — un score unique sur un projet
-pédagogique n'aurait pas de méthode d'audit derrière lui. Le Jour 12
+Le Jour 12
 (registre des traitements) et le Jour 20 (tableau de bord) calculent
 chacun un score réel à partir de données qu'ils mesurent effectivement ;
 voir leurs README respectifs pour la méthode de calcul.
@@ -177,9 +176,9 @@ voir leurs README respectifs pour la méthode de calcul.
 
 Chaque outil m'a forcé à répondre à deux questions : *qu'est-ce qui peut mal tourner ici ?* et *comment est-ce que je le prouve ?*
 
-- Le honeypot (J07) m'a appris que les attaquants sont prévisibles — ils essaient toujours les mêmes chemins d'abord (`/wp-admin`, `/.env`, `/phpmyadmin`).
-- Le Data Masking RBAC (J13) m'a appris que l'accès aux données n'est jamais binaire — il y a toujours au moins 4 niveaux entre "tout voir" et "rien voir".
-- Le SOAR (J28) m'a appris que la réponse à incident la plus rapide est celle qu'on a planifiée avant l'incident — et qu'un enrichissement automatisé n'a de valeur que s'il consulte une vraie source, pas une donnée inventée pour l'occasion.
+- Le honeypot (J07) m'a appris que les attaquants sont prévisibles, ils essaient toujours les mêmes chemins d'abord (`/wp-admin`, `/.env`, `/phpmyadmin`).
+- Le Data Masking RBAC (J13) m'a appris que l'accès aux données n'est jamais binaire, il y a toujours au moins 4 niveaux entre "tout voir" et "rien voir".
+- Le SOAR (J28) m'a appris que la réponse à incident la plus rapide est celle qu'on a planifiée avant l'incident, et qu'un enrichissement automatisé n'a de valeur que s'il consulte une vraie source, pas une donnée inventée pour l'occasion.
 - Relire ce projet après coup m'a appris qu'un outil qui *prétend* fonctionner et un outil qui fonctionne réellement se ressemblent beaucoup en apparence, et qu'il faut vraiment lancer chaque commande pour faire la différence.
 
 ---
@@ -196,7 +195,7 @@ Chaque outil m'a forcé à répondre à deux questions : *qu'est-ce qui peut mal
 
 ## Contribuer
 
-Les contributions sont bienvenues — correction de bug, amélioration de doc, variante d'outil.
+Les contributions sont bienvenues, correction de bug, amélioration de doc, variante d'outil.
 
 ```bash
 git checkout -b feature/jour-XX-nom-outil
