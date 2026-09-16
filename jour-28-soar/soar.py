@@ -597,19 +597,17 @@ def generate_dashboard(alerts: list[Alert],
     auto_rate = sum(1 for a in alerts if a.status == "RESOLVED") / len(alerts) * 100 if alerts else 0
     rgpd_count = sum(1 for a in alerts if a.rgpd_notif)
 
-    sev_colors = {"CRITIQUE":"#e74c3c","ÉLEVÉE":"#e67e22","MODÉRÉE":"#f39c12","FAIBLE":"#27ae60","INFO":"#3498db"}
-    sev_icons  = {"CRITIQUE":"🔴","ÉLEVÉE":"🟠","MODÉRÉE":"🟡","FAIBLE":"🟢","INFO":"🔵"}
+    sev_colors = {"CRITIQUE":"#e8536b","ÉLEVÉE":"#e8964d","MODÉRÉE":"#e0c352","FAIBLE":"#4dd68c","INFO":"#5b7fff"}
 
     rows_html = ""
     for a in alerts:
         c    = sev_colors.get(a.severity, "#666")
-        icon = sev_icons.get(a.severity, "⚪")
-        status_style = "color:#27ae60" if a.status=="RESOLVED" else "color:#e67e22"
+        status_style = "color:#4dd68c" if a.status=="RESOLVED" else "color:#e8964d"
         rows_html += f"""
         <tr>
           <td><code style="color:var(--accent)">{escape(a.id)}</code></td>
           <td>{escape(a.ts.strftime('%H:%M:%S'))}</td>
-          <td><span class="badge" style="background:{c}">{icon} {escape(a.severity)}</span></td>
+          <td><span class="badge" style="background:{c}">{escape(a.severity)}</span></td>
           <td>{escape(a.type)}</td>
           <td><code style="font-size:.78rem">{escape(a.source_ip or '—')}</code></td>
           <td>{escape(a.playbook or '—')}</td>
@@ -624,27 +622,29 @@ def generate_dashboard(alerts: list[Alert],
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>SOAR Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    :root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
+    :root{{--bg:#0b0e1a;--card:#141a2e;--border:#262d4a;--text:#e4e7f5;--muted:#8890b8;--accent:#5b7fff}}
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;padding:2rem;max-width:1300px;margin:auto}}
-    h1{{color:var(--accent);font-size:1.8rem;margin-bottom:.3rem}}
-    .meta{{color:var(--muted);font-size:.82rem;margin-bottom:2rem}}
+    body{{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;padding:2rem;max-width:1300px;margin:auto}}
+    h1{{color:var(--text);font-weight:600;font-size:1.6rem;margin-bottom:.3rem;border-left:4px solid var(--accent);padding-left:.7rem}}
+    .meta{{color:var(--muted);font-size:.82rem;margin-bottom:2rem;padding-left:.9rem}}
     .kpi-row{{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-bottom:2rem}}
-    .kpi{{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center}}
-    .kpi-val{{font-size:2rem;font-weight:900;color:var(--accent)}}
+    .kpi{{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:1rem;text-align:center}}
+    .kpi-val{{font-family:'JetBrains Mono',monospace;font-size:1.9rem;font-weight:600;color:var(--accent)}}
     .kpi-label{{font-size:.75rem;color:var(--muted);margin-top:.3rem}}
-    .section{{color:var(--accent);font-size:1.05rem;margin:2rem 0 .8rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
-    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border)}}
-    th{{background:#0a0c14;color:var(--accent);padding:.6rem .8rem;text-align:left;font-size:.78rem;white-space:nowrap}}
+    .section{{color:var(--text);font-weight:600;font-size:1.05rem;margin:2rem 0 .8rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
+    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:6px;overflow:hidden;border:1px solid var(--border)}}
+    th{{background:#0e1220;color:var(--accent);padding:.6rem .8rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}}
     td{{padding:.55rem .8rem;border-top:1px solid var(--border);font-size:.82rem;color:var(--muted)}}
-    tr:hover td{{background:#1e2235}}
-    .badge{{color:#fff;padding:.15rem .5rem;border-radius:3px;font-size:.75rem;font-weight:700;white-space:nowrap}}
-    code{{background:#0a0c14;padding:.15rem .4rem;border-radius:3px;font-size:.78rem}}
+    tr:hover td{{background:#1a2140}}
+    .badge{{color:#0b0e1a;padding:.15rem .5rem;border-radius:3px;font-size:.75rem;font-weight:700;white-space:nowrap}}
+    code{{font-family:'JetBrains Mono',monospace;background:#0e1220;padding:.15rem .4rem;border-radius:3px;font-size:.78rem}}
   </style>
 </head>
 <body>
-  <h1>🤖 SOAR — Tableau de Bord Incidents</h1>
+  <h1>SOAR — Tableau de Bord Incidents</h1>
   <div class="meta">Généré le {now} · {len(alerts)} incident(s) traité(s) · ISO 27001 A.16 · RGPD Art. 33</div>
 
   <div class="kpi-row">
@@ -652,9 +652,9 @@ def generate_dashboard(alerts: list[Alert],
     <div class="kpi"><div class="kpi-val">{auto_rate:.0f}%</div><div class="kpi-label">Taux d'automatisation</div></div>
     <div class="kpi"><div class="kpi-val">{avg_time*1000:.0f}ms</div><div class="kpi-label">Temps moyen réponse</div></div>
     <div class="kpi"><div class="kpi-val">{total_actions}</div><div class="kpi-label">Actions exécutées</div></div>
-    <div class="kpi"><div class="kpi-val" style="color:#e74c3c">{counts.get('CRITIQUE',0)}</div><div class="kpi-label">Critiques</div></div>
-    <div class="kpi"><div class="kpi-val" style="color:#e67e22">{counts.get('ÉLEVÉE',0)}</div><div class="kpi-label">Élevées</div></div>
-    <div class="kpi"><div class="kpi-val" style="color:#3498db">{rgpd_count}</div><div class="kpi-label">Notif. RGPD Art.33</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#e8536b">{counts.get('CRITIQUE',0)}</div><div class="kpi-label">Critiques</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#e8964d">{counts.get('ÉLEVÉE',0)}</div><div class="kpi-label">Élevées</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--accent)">{rgpd_count}</div><div class="kpi-label">Notif. RGPD Art.33</div></div>
   </div>
 
   <div class="section">Journal des incidents</div>

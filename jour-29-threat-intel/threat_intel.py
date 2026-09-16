@@ -239,12 +239,20 @@ def generate_report(db, output_path=None):
         for i in iocs[:100]
     )
     html = (f'<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">'
-            f'<title>Threat Intelligence</title><style>'
-            f'body{{background:#0f1117;color:#e2e8f0;font-family:sans-serif;padding:2rem;max-width:1100px;margin:auto}}'
-            f'h1{{color:#64ffda}}table{{width:100%;border-collapse:collapse;background:#1a1d27;border:1px solid #2d3148}}'
-            f'th{{background:#0a0c14;color:#64ffda;padding:.55rem;text-align:left;font-size:.77rem}}'
-            f'td{{padding:.48rem;border-top:1px solid #2d3148;color:#8892b0}}code{{background:#0a0c14;padding:.12rem .35rem;border-radius:3px}}</style></head>'
-            f'<body><h1>Threat Intelligence Feed</h1><p style="color:#8892b0">{now} | {stats["total"]} IoC | TLP:WHITE</p>'
+            f'<title>Threat Intelligence</title>'
+            f'<link rel="preconnect" href="https://fonts.googleapis.com">'
+            f'<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">'
+            f'<style>'
+            f':root{{--bg:#0c0808;--card:#180f0f;--border:#3a1f1f;--text:#f0dede;--muted:#a37d7d;--accent:#ff4d4d}}'
+            f'*{{box-sizing:border-box}}'
+            f'body{{background:var(--bg);color:var(--text);font-family:\'JetBrains Mono\',monospace;padding:2rem;max-width:1100px;margin:auto}}'
+            f'h1{{color:var(--accent);font-size:1.4rem;letter-spacing:.02em}}'
+            f'table{{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);margin-top:1rem}}'
+            f'th{{background:#140c0c;color:var(--accent);padding:.55rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}}'
+            f'td{{padding:.48rem;border-top:1px solid var(--border);color:var(--muted)}}'
+            f'code{{background:#140c0c;padding:.12rem .35rem;border-radius:2px;color:var(--text)}}'
+            f'</style></head>'
+            f'<body><h1>Threat Intelligence Feed</h1><p style="color:var(--muted)">{now} · {stats["total"]} IoC · TLP:WHITE</p>'
             f'<table><thead><tr><th>Severite</th><th>Valeur</th><th>Type</th><th>Confiance</th><th>Source</th><th>Hits</th></tr></thead>'
             f'<tbody>{rows}</tbody></table></body></html>')
     if output_path:

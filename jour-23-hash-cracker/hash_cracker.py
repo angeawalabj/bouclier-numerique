@@ -23,19 +23,13 @@ Référence : OWASP ASVS 2.4, ANSSI RGS, NIST SP 800-63B.
 """
 
 import hashlib
-import hmac
 import itertools
+import json
 import string
 import time
-import json
-import sys
-import os
-from pathlib import Path
-from datetime import datetime
-from typing import Optional
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from datetime import datetime
+from pathlib import Path
 
 # ════════════════════════════════════════════════════════════════
 # IDENTIFICATION D'ALGORITHME
@@ -160,7 +154,7 @@ class HashCracker:
 
     def attack_dictionary(self, target_hash: str,
                           wordlist: list[str],
-                          rules: bool = True) -> Optional[str]:
+                          rules: bool = True) -> str | None:
         """
         Attaque par dictionnaire avec règles de transformation.
 
@@ -218,7 +212,7 @@ class HashCracker:
     def attack_bruteforce(self, target_hash: str,
                           charset: str = None,
                           min_len: int = 1,
-                          max_len: int = 6) -> Optional[str]:
+                          max_len: int = 6) -> str | None:
         """
         Bruteforce pur — explore systématiquement toutes les combinaisons.
 
@@ -261,7 +255,7 @@ class HashCracker:
 
     def attack_hybrid(self, target_hash: str,
                       wordlist: list[str],
-                      append_digits: int = 4) -> Optional[str]:
+                      append_digits: int = 4) -> str | None:
         """
         Hybride : mot du dictionnaire + suffixe numérique.
         Très efficace contre "motdepasse2024", "admin1234" etc.
@@ -400,7 +394,7 @@ class PasswordAuditor:
         return report
 
     def generate_report(self, audit_result: dict,
-                        output_path: Optional[Path] = None) -> str:
+                        output_path: Path | None = None) -> str:
         """Génère un rapport HTML de l'audit de mots de passe."""
         total   = audit_result["total"]
         cracked = audit_result["cracked"]
@@ -409,7 +403,7 @@ class PasswordAuditor:
         weak    = audit_result["weak"]
 
         score = max(0, 100 - int(rate * 1.2) - weak * 5)
-        score_color = "#e74c3c" if score < 50 else "#e67e22" if score < 75 else "#27ae60"
+        score_color = "#e8536b" if score < 50 else "#ffb238" if score < 75 else "#4dd68c"
 
         sev, msg = HASH_SECURITY.get(audit_result["algorithm"].lower(),
                                      ("?", "Algorithme inconnu"))
@@ -417,12 +411,11 @@ class PasswordAuditor:
         rows_html = ""
         for f in audit_result["findings"]:
             if f["cracked"]:
-                pwd_cell = f'<span style="color:#e74c3c;font-weight:700">{f["password"]}</span>'
-                icon = "💀" if f["weak"] else "⚠️"
-                status = f'{icon} Craqué ({f["method"]})'
+                pwd_cell = f'<span style="color:#e8536b;font-weight:700">{f["password"]}</span>'
+                status = f'Craqué ({f["method"]})'
             else:
-                pwd_cell = '<span style="color:#27ae60">—</span>'
-                status   = "✅ Résistant"
+                pwd_cell = '<span style="color:#4dd68c">—</span>'
+                status   = "Résistant"
 
             rows_html += f"""<tr>
               <td>{f['user']}</td>
@@ -437,40 +430,42 @@ class PasswordAuditor:
 <html lang="fr">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>🔑 Audit Mots de Passe</title>
+  <title>Audit Mots de Passe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
+    :root{{--bg:#0a0806;--card:#171310;--border:#332818;--text:#f5e6c8;--muted:#9c8a5f;--accent:#ffb238}}
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;padding:2rem;max-width:1000px;margin:auto}}
-    h1{{color:var(--accent);font-size:1.8rem;margin-bottom:.3rem}}
+    body{{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;padding:2rem;max-width:1000px;margin:auto}}
+    h1{{color:var(--accent);font-size:1.5rem;margin-bottom:.3rem;font-weight:600}}
     .meta{{color:var(--muted);font-size:.82rem;margin-bottom:2rem}}
-    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;flex-wrap:wrap}}
-    .score-num{{font-size:3.5rem;font-weight:900;color:{score_color}}}
+    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem;flex-wrap:wrap}}
+    .score-num{{font-size:3.5rem;font-weight:700;color:{score_color}}}
     .score-sub{{color:var(--muted);font-size:.85rem}}
-    .algo-card{{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem}}
+    .algo-card{{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1rem;margin-bottom:1.5rem}}
     .algo-title{{color:var(--accent);font-weight:700;margin-bottom:.4rem}}
     .chips{{display:flex;gap:.7rem;flex-wrap:wrap;margin:.8rem 0}}
-    .chip{{padding:.3rem .8rem;border-radius:20px;font-weight:700;font-size:.82rem}}
-    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border)}}
-    th{{background:#0a0c14;color:var(--accent);padding:.7rem 1rem;text-align:left;font-size:.82rem}}
+    .chip{{padding:.3rem .8rem;border-radius:3px;font-weight:700;font-size:.82rem}}
+    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:4px;overflow:hidden;border:1px solid var(--border)}}
+    th{{background:#120e0a;color:var(--accent);padding:.7rem 1rem;text-align:left;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}}
     td{{padding:.65rem 1rem;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted)}}
-    tr:hover td{{background:#1e2235}}
-    code{{background:#0a0c14;padding:.2rem .4rem;border-radius:3px;font-size:.78rem}}
-    .section{{color:var(--accent);font-size:1.1rem;margin:2rem 0 1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
-    .reco{{background:rgba(100,255,218,.06);border-radius:8px;padding:1rem;margin-top:1.5rem;font-size:.88rem;line-height:1.7}}
+    tr:hover td{{background:#211a12}}
+    code{{background:#120e0a;padding:.2rem .4rem;border-radius:3px;font-size:.78rem;color:var(--text)}}
+    .section{{color:var(--accent);font-size:1.05rem;margin:2rem 0 1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
+    .reco{{background:rgba(255,178,56,.08);border-left:3px solid var(--accent);border-radius:2px;padding:1rem;margin-top:1.5rem;font-size:.88rem;line-height:1.7}}
   </style>
 </head>
 <body>
-  <h1>🔑 Audit de Résistance — Mots de Passe</h1>
+  <h1>Audit de Résistance — Mots de Passe</h1>
   <div class="meta">Algorithme : {algo} · {now} · {total} compte(s) audité(s)</div>
 
   <div class="score-row">
     <div><div class="score-num">{score}</div><div class="score-sub">Score sécurité /100</div></div>
     <div>
       <div class="chips">
-        <span class="chip" style="background:#e74c3c22;color:#e74c3c">💀 {cracked}/{total} craqués ({rate}%)</span>
-        <span class="chip" style="background:#e67e2222;color:#e67e22">⚠️ {weak} mots de passe faibles</span>
-        <span class="chip" style="background:#27ae6022;color:#27ae60">✅ {total-cracked} résistants</span>
+        <span class="chip" style="background:#e8536b22;color:#e8536b">{cracked}/{total} craqués ({rate}%)</span>
+        <span class="chip" style="background:#ffb23822;color:#ffb238">{weak} mots de passe faibles</span>
+        <span class="chip" style="background:#4dd68c22;color:#4dd68c">{total-cracked} résistants</span>
       </div>
     </div>
   </div>
@@ -488,12 +483,12 @@ class PasswordAuditor:
   </table>
 
   <div class="reco">
-    <strong style="color:var(--accent)">📋 Recommandations</strong><br><br>
-    ✅ Migrer vers <strong>bcrypt</strong> (work factor ≥ 12) ou <strong>Argon2id</strong> (recommandation OWASP 2024)<br>
-    ✅ Imposer une politique : 12 caractères minimum, majuscule + chiffre + symbole<br>
-    ✅ Activer la vérification contre les listes de mots de passe compromis (HIBP)<br>
-    ✅ Forcer la réinitialisation des comptes dont le mot de passe a été craqué<br>
-    ✅ Activer le MFA sur tous les comptes, en particulier les admins<br><br>
+    <strong style="color:var(--accent)">Recommandations</strong><br><br>
+    Migrer vers <strong>bcrypt</strong> (work factor ≥ 12) ou <strong>Argon2id</strong> (recommandation OWASP 2024)<br>
+    Imposer une politique : 12 caractères minimum, majuscule + chiffre + symbole<br>
+    Activer la vérification contre les listes de mots de passe compromis (HIBP)<br>
+    Forcer la réinitialisation des comptes dont le mot de passe a été craqué<br>
+    Activer le MFA sur tous les comptes, en particulier les admins<br><br>
     <strong>Référentiels :</strong> OWASP ASVS 2.4.1 · NIST SP 800-63B Section 5.1.1 · ANSSI RGS B3
   </div>
 
