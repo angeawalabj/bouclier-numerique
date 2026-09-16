@@ -212,7 +212,7 @@ def generate_report_html(phases: dict, output_path: Path) -> Path:
     rows = ""
     for name, result in phases.items():
         status = "OK" if result["ok"] else "ÉCHEC"
-        color = "#27ae60" if result["ok"] else "#e74c3c"
+        color = "#7cc99a" if result["ok"] else "#e8677a"
         detail = (
             " · ".join(f"{k}={v}" for k, v in result["data"].items())
             if result["ok"] else escape(str(result["error"]))
@@ -221,7 +221,7 @@ def generate_report_html(phases: dict, output_path: Path) -> Path:
             f'<tr><td>{escape(name)}</td>'
             f'<td style="color:{color};font-weight:700">{status}</td>'
             f'<td>{result["duration_ms"]:.1f}ms</td>'
-            f'<td style="font-size:.82rem;color:#8892b0">{detail}</td></tr>'
+            f'<td style="font-size:.82rem;color:var(--muted)">{detail}</td></tr>'
         )
 
     compliance_html = "".join(
@@ -233,20 +233,22 @@ def generate_report_html(phases: dict, output_path: Path) -> Path:
     html = f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
 <title>Bouclier Numérique — Rapport d'orchestration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
+:root{{--bg:#120f1a;--card:#1e1830;--border:#332a4d;--text:#ece8f5;--muted:#9188a8;--accent:#c9a94d}}
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:var(--bg);color:var(--text);font-family:sans-serif;padding:2rem;max-width:1000px;margin:auto}}
-h1{{color:var(--accent);font-size:1.6rem}}
-h2{{color:var(--accent);font-size:1rem;margin:1.6rem 0 .6rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}}
-.meta{{color:var(--muted);font-size:.82rem;margin:.3rem 0 1.5rem}}
-table{{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}}
-th{{background:#0a0c14;color:var(--accent);padding:.5rem .8rem;text-align:left;font-size:.78rem}}
-td{{padding:.45rem .8rem;border-top:1px solid var(--border);font-size:.85rem}}
+body{{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;padding:2rem;max-width:1000px;margin:auto}}
+h1{{color:var(--text);font-weight:700;font-size:1.7rem;letter-spacing:-.01em}}
+h2{{color:var(--accent);font-weight:500;font-size:.95rem;text-transform:uppercase;letter-spacing:.06em;margin:1.8rem 0 .7rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
+.meta{{color:var(--muted);font-size:.82rem;margin:.3rem 0 1.5rem;font-family:'JetBrains Mono',monospace}}
+table{{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:4px;overflow:hidden}}
+th{{background:#160f22;color:var(--accent);padding:.5rem .8rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}}
+td{{padding:.45rem .8rem;border-top:1px solid var(--border);font-size:.85rem;font-family:'JetBrains Mono',monospace}}
 .comp-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.7rem}}
-.comp-card{{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.7rem}}
-.comp-title{{color:var(--accent);font-weight:700;font-size:.85rem;margin-bottom:.4rem}}
-.tag{{display:inline-block;background:#1e3a5f;color:#7eb8f7;padding:.1rem .35rem;border-radius:3px;font-size:.7rem;margin:.1rem}}
+.comp-card{{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:.7rem}}
+.comp-title{{color:var(--accent);font-weight:600;font-size:.85rem;margin-bottom:.4rem}}
+.tag{{display:inline-block;background:#2a2140;color:#b9a8e0;padding:.1rem .35rem;border-radius:3px;font-size:.7rem;margin:.1rem;font-family:'JetBrains Mono',monospace}}
 </style></head><body>
 <h1>Bouclier Numérique — Rapport d'orchestration</h1>
 <div class="meta">Généré le {now} · chaque ligne est le résultat réel d'un module du dépôt, exécuté à l'instant sur ce poste</div>

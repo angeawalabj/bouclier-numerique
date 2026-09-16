@@ -23,19 +23,16 @@ Référence : ISO 27001 A.12.6.1, ANSSI (hygiène informatique, mesure 2).
 import json
 import socket
 import ssl
+import threading
 import time
-import re
-import urllib.request
 import urllib.error
 import urllib.parse
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from datetime import datetime
-from typing import Optional
+import urllib.request
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from html import escape
-
+from pathlib import Path
 
 # ════════════════════════════════════════════════════════════════
 # COLLECTEURS OSINT
@@ -64,7 +61,7 @@ class OsintCollector:
         self._lock = threading.Lock()
 
     def _http_get(self, url: str, headers: dict = None,
-                  as_json: bool = False) -> Optional[dict | str]:
+                  as_json: bool = False) -> dict | str | None:
         """Requête HTTP GET simple."""
         req_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; BouclierNumerique-OSINT/1.0)",
@@ -409,7 +406,7 @@ class OsintCollector:
 # RAPPORT HTML
 # ════════════════════════════════════════════════════════════════
 
-def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
+def generate_report(data: dict, output_path: Path | None = None) -> str:
     domain   = data["domain"]
     subs     = data.get("subdomains", [])
     certs    = data.get("certificates", [])
@@ -422,7 +419,6 @@ def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
     exposures = data.get("exposures", [])
 
     sev_colors = {"CRITIQUE":"#e74c3c","ÉLEVÉE":"#e67e22","MODÉRÉE":"#f39c12","FAIBLE":"#27ae60"}
-    sev_icons  = {"CRITIQUE":"🔴","ÉLEVÉE":"🟠","MODÉRÉE":"🟡","FAIBLE":"🟢"}
 
     # Score d'exposition
     score_penalty = sum({
@@ -435,14 +431,13 @@ def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
     exp_html = ""
     for ex in sorted(exposures, key=lambda x: {"CRITIQUE":0,"ÉLEVÉE":1,"MODÉRÉE":2,"FAIBLE":3}.get(x["severity"],9)):
         c = sev_colors.get(ex["severity"],"#666")
-        i = sev_icons.get(ex["severity"],"⚪")
         exp_html += f"""<div class="exp" style="border-left:4px solid {c}">
           <div class="exp-head">
-            <span class="badge" style="background:{c}">{i} {escape(ex['severity'])}</span>
+            <span class="badge" style="background:{c}">{escape(ex['severity'])}</span>
             <strong>{escape(ex['type'])}</strong>
           </div>
           <p>{escape(ex['detail'])}</p>
-          <div class="fix">✅ {escape(ex['remediation'])}</div>
+          <div class="fix">{escape(ex['remediation'])}</div>
         </div>"""
 
     # HTML des sous-domaines
@@ -493,40 +488,42 @@ def generate_report(data: dict, output_path: Optional[Path] = None) -> str:
 <html lang="fr">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>🕵️ OSINT — {escape(domain)}</title>
+  <title>OSINT — {escape(domain)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    :root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
+    :root{{--bg:#eef1ea;--card:#ffffff;--border:#c9cfc0;--text:#20291f;--muted:#5f6b57;--accent:#2f5d50}}
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;padding:2rem;max-width:1100px;margin:auto}}
-    h1{{color:var(--accent);font-size:1.8rem;margin-bottom:.3rem}}
+    body{{background:var(--bg);color:var(--text);font-family:'IBM Plex Mono',monospace;padding:2rem;max-width:1100px;margin:auto}}
+    h1{{font-family:'IBM Plex Serif',serif;color:var(--accent);font-size:1.7rem;margin-bottom:.3rem;font-weight:600}}
     .meta-info{{color:var(--muted);font-size:.82rem;margin-bottom:2rem}}
-    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;flex-wrap:wrap}}
-    .score-num{{font-size:3.5rem;font-weight:900;color:{score_color}}}
-    .section{{color:var(--accent);font-size:1.05rem;margin:2rem 0 .8rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
+    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem;flex-wrap:wrap}}
+    .score-num{{font-family:'IBM Plex Serif',serif;font-size:3.5rem;font-weight:700;color:{score_color}}}
+    .section{{font-family:'IBM Plex Serif',serif;color:var(--accent);font-size:1.15rem;margin:2rem 0 .8rem;border-bottom:2px solid var(--border);padding-bottom:.4rem;font-weight:600}}
     .grid-3{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.8rem;margin-bottom:1rem}}
-    .info-card{{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.8rem}}
+    .info-card{{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:.8rem}}
     .info-label{{color:var(--muted);font-size:.75rem;margin-bottom:.3rem}}
     .info-val{{font-size:.95rem;font-weight:600}}
     .tags{{display:flex;flex-wrap:wrap;gap:.4rem}}
-    .tag{{background:#1e3a5f;color:#7eb8f7;padding:.2rem .6rem;border-radius:4px;font-size:.78rem;font-family:monospace}}
-    .exp{{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:.8rem;border:1px solid var(--border)}}
+    .tag{{background:#e2e7d9;color:#3c4d38;padding:.2rem .6rem;border-radius:3px;font-size:.78rem;font-family:'IBM Plex Mono',monospace}}
+    .exp{{background:var(--card);border-radius:4px;padding:1rem;margin-bottom:.8rem;border:1px solid var(--border);border-left:4px solid var(--border)}}
     .exp-head{{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem}}
-    .badge{{color:#fff;padding:.2rem .5rem;border-radius:4px;font-size:.76rem;font-weight:700}}
-    p{{color:var(--muted);font-size:.88rem;line-height:1.5}}
-    .fix{{background:rgba(100,255,218,.06);border-radius:4px;padding:.5rem .7rem;margin-top:.5rem;font-size:.84rem}}
-    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:1rem}}
-    th{{background:#0a0c14;color:var(--accent);padding:.6rem .9rem;text-align:left;font-size:.8rem}}
-    td{{padding:.55rem .9rem;border-top:1px solid var(--border);font-size:.83rem;color:var(--muted)}}
-    code{{background:#0a0c14;padding:.15rem .4rem;border-radius:3px;font-size:.8rem;word-break:break-all}}
-    .repo{{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.7rem;margin-bottom:.5rem}}
+    .badge{{color:#fff;padding:.2rem .5rem;border-radius:3px;font-size:.76rem;font-weight:700}}
+    p{{color:var(--text);font-size:.88rem;line-height:1.5}}
+    .fix{{background:#e2e7d9;border-left:3px solid var(--accent);border-radius:2px;padding:.5rem .7rem;margin-top:.5rem;font-size:.84rem}}
+    table{{width:100%;border-collapse:collapse;background:var(--card);border-radius:4px;overflow:hidden;border:1px solid var(--border);margin-bottom:1rem}}
+    th{{background:#e2e7d9;color:var(--accent);padding:.6rem .9rem;text-align:left;font-size:.8rem}}
+    td{{padding:.55rem .9rem;border-top:1px solid var(--border);font-size:.83rem;color:var(--text)}}
+    code{{background:#e2e7d9;padding:.15rem .4rem;border-radius:2px;font-size:.8rem;word-break:break-all}}
+    .repo{{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:.7rem;margin-bottom:.5rem}}
     .repo a{{color:var(--accent);text-decoration:none;font-weight:600}}
-    .lang{{background:#1a3a1a;color:#7ef77e;padding:.1rem .4rem;border-radius:3px;font-size:.74rem;margin-left:.5rem}}
+    .lang{{background:#e2e7d9;color:var(--accent);padding:.1rem .4rem;border-radius:3px;font-size:.74rem;margin-left:.5rem}}
     .check-row{{display:flex;gap:2rem;flex-wrap:wrap;margin:.5rem 0}}
     .check-item{{font-size:.88rem}}
   </style>
 </head>
 <body>
-  <h1>🕵️ Rapport OSINT</h1>
+  <h1>Rapport OSINT</h1>
   <div class="meta-info">Cible : <strong>{escape(domain)}</strong> · {now} · Usage défensif uniquement</div>
 
   <div class="score-row">

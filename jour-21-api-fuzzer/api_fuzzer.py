@@ -19,23 +19,16 @@ Usage légal uniquement sur des APIs que vous possédez ou êtes autorisé
 à tester.
 """
 
+import html
 import json
+import threading
 import time
-import urllib.request
 import urllib.error
 import urllib.parse
-import threading
-import sqlite3
-import html
-import re
-import random
-import string
-from pathlib import Path
-from datetime import datetime
-from typing import Optional
+import urllib.request
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from datetime import datetime
+from pathlib import Path
 
 # ════════════════════════════════════════════════════════════════
 # BIBLIOTHÈQUE DE PAYLOADS — OWASP API Top 10
@@ -157,7 +150,7 @@ SAFE_CODES = {400, 401, 403, 404, 422, 429}
 
 class ApiFuzzer:
 
-    def __init__(self, base_url: str, token: Optional[str] = None,
+    def __init__(self, base_url: str, token: str | None = None,
                  timeout: float = 5.0, rate_limit: float = 0.1,
                  max_workers: int = 5):
         self.base_url   = base_url.rstrip("/")
@@ -302,7 +295,7 @@ class ApiFuzzer:
             self._add_finding(
                 category="API2 — Auth cassée",
                 severity="CRITIQUE",
-                title=f"Endpoint protégé accessible sans authentification",
+                title="Endpoint protégé accessible sans authentification",
                 description=f"{protected_endpoint} retourne HTTP 200 sans token.",
                 evidence=r["body"][:200],
                 url=self.base_url + protected_endpoint,
@@ -396,8 +389,8 @@ class ApiFuzzer:
                     url=self.base_url + endpoint,
                     owasp="API5:2023 — Broken Function Level Authorization",
                     remediation=(
-                        f"Restreindre explicitement les méthodes autorisées. "
-                        f"Retourner HTTP 405 pour toute méthode non prévue."
+                        "Restreindre explicitement les méthodes autorisées. "
+                        "Retourner HTTP 405 pour toute méthode non prévue."
                     ),
                 )
 
@@ -405,7 +398,7 @@ class ApiFuzzer:
 
     def test_security_headers(self, endpoint: str = "/"):
         """Vérifie la présence des headers de sécurité obligatoires."""
-        print(f"  [HDR]  Vérification headers de sécurité")
+        print("  [HDR]  Vérification headers de sécurité")
         r = self._request("GET", endpoint)
         headers = {k.lower(): v for k, v in r.get("headers", {}).items()}
 
@@ -500,7 +493,7 @@ class ApiFuzzer:
                         category=f"API10 — {category}",
                         severity="ÉLEVÉE",
                         title=f"XSS réfléchi potentiel sur {endpoint}",
-                        description=f"Le payload XSS est retourné tel quel dans la réponse.",
+                        description="Le payload XSS est retourné tel quel dans la réponse.",
                         evidence=f"Payload: {payload}\nRetrouvé dans: {r['body'][:200]}",
                         url=self.base_url + endpoint,
                         owasp="API10:2023 — Unsafe Consumption of APIs",
@@ -518,7 +511,7 @@ class ApiFuzzer:
                             severity="CRITIQUE",
                             title=f"Injection SQL probable sur {endpoint}",
                             description=(
-                                f"Le payload SQL provoque une erreur 500 avec "
+                                "Le payload SQL provoque une erreur 500 avec "
                                 "un message révélant la structure de la base de données."
                             ),
                             evidence=f"Payload: {payload}\nErreur: {r['body'][:300]}",
@@ -565,15 +558,12 @@ class ApiFuzzer:
 
     # ── Rapport ──────────────────────────────────────────────────
 
-    def generate_report(self, output_path: Optional[Path] = None) -> str:
+    def generate_report(self, output_path: Path | None = None) -> str:
         """Génère un rapport HTML complet des vulnérabilités trouvées."""
         severity_order  = {"CRITIQUE": 0, "ÉLEVÉE": 1, "MODÉRÉE": 2, "FAIBLE": 3}
         severity_colors = {
-            "CRITIQUE": "#e74c3c", "ÉLEVÉE": "#e67e22",
-            "MODÉRÉE": "#f39c12", "FAIBLE": "#27ae60",
-        }
-        severity_icons = {
-            "CRITIQUE": "🔴", "ÉLEVÉE": "🟠", "MODÉRÉE": "🟡", "FAIBLE": "🟢",
+            "CRITIQUE": "#ff6b6b", "ÉLEVÉE": "#ff9f5a",
+            "MODÉRÉE": "#e0c352", "FAIBLE": "#7fe8a4",
         }
 
         sorted_findings = sorted(
@@ -591,29 +581,28 @@ class ApiFuzzer:
             counts.get("MODÉRÉE",  0) *  5 +
             counts.get("FAIBLE",   0) *  2
         ))
-        score_color = "#e74c3c" if score < 50 else "#e67e22" if score < 75 else "#27ae60"
+        score_color = "#ff6b6b" if score < 50 else "#ff9f5a" if score < 75 else "#7fe8a4"
 
         findings_html = ""
         for f in sorted_findings:
             color = severity_colors.get(f["severity"], "#666")
-            icon  = severity_icons.get(f["severity"], "⚪")
             findings_html += f"""
             <div class="finding" style="border-left: 4px solid {color};">
               <div class="finding-header">
-                <span class="severity-badge" style="background:{color}">{icon} {html.escape(f['severity'])}</span>
+                <span class="severity-badge" style="background:{color}">{html.escape(f['severity'])}</span>
                 <span class="owasp-tag">{html.escape(f['owasp'].split('—')[0].strip())}</span>
                 <strong>{html.escape(f['title'])}</strong>
               </div>
               <p>{html.escape(f['description'])}</p>
               <details>
-                <summary>📋 Preuve technique</summary>
+                <summary>Preuve technique</summary>
                 <pre><code>{html.escape(f['evidence'])}</code></pre>
               </details>
               <div class="remediation">
-                <strong>✅ Remédiation :</strong> {html.escape(f['remediation'])}
+                <strong>Remédiation :</strong> {html.escape(f['remediation'])}
               </div>
               <div class="meta">
-                🔗 {html.escape(f['url'])} &nbsp;|&nbsp; ⏱ {f['ts'][:19]}
+                {html.escape(f['url'])} &nbsp;|&nbsp; {f['ts'][:19]}
               </div>
             </div>"""
 
@@ -623,45 +612,47 @@ class ApiFuzzer:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>🛡️ Rapport Pentest API — {html.escape(self.base_url)}</title>
+  <title>Rapport Pentest API — {html.escape(self.base_url)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {{
-      --bg: #0f1117; --card: #1a1d27; --border: #2d3148;
-      --text: #e2e8f0; --muted: #8892b0; --accent: #64ffda;
+      --bg: #0f0d16; --card: #1b1726; --border: #332c47;
+      --text: #e9e4f5; --muted: #948aab; --accent: #a684ff;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 2rem; }}
-    h1 {{ color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }}
-    .meta-info {{ color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }}
-    .score-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    body {{ background: var(--bg); color: var(--text); font-family: 'Sora', sans-serif; padding: 2rem; }}
+    h1 {{ color: var(--text); font-weight: 700; font-size: 1.6rem; margin-bottom: 0.3rem; }}
+    .meta-info {{ color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; font-family: 'JetBrains Mono', monospace; }}
+    .score-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px;
                    padding: 2rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 2rem; }}
-    .score-number {{ font-size: 4rem; font-weight: 900; color: {score_color}; }}
+    .score-number {{ font-family: 'JetBrains Mono', monospace; font-size: 4rem; font-weight: 700; color: {score_color}; }}
     .score-label {{ color: var(--muted); font-size: 0.9rem; }}
     .stats {{ display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }}
-    .stat-chip {{ padding: 0.5rem 1rem; border-radius: 20px; font-weight: 700; font-size: 0.9rem; }}
-    .finding {{ background: var(--card); border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem;
+    .stat-chip {{ padding: 0.5rem 1rem; border-radius: 4px; font-weight: 700; font-size: 0.9rem; }}
+    .finding {{ background: var(--card); border-radius: 6px; padding: 1.2rem; margin-bottom: 1rem;
                 border: 1px solid var(--border); }}
     .finding-header {{ display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.8rem; flex-wrap: wrap; }}
-    .severity-badge {{ color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700; }}
-    .owasp-tag {{ background: #1e3a5f; color: #7eb8f7; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; }}
+    .severity-badge {{ color: #14101f; padding: 0.2rem 0.6rem; border-radius: 3px; font-size: 0.8rem; font-weight: 700; }}
+    .owasp-tag {{ background: #2a2140; color: #b9a8e0; padding: 0.2rem 0.6rem; border-radius: 3px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; }}
     p {{ color: var(--muted); margin: 0.5rem 0; font-size: 0.92rem; line-height: 1.5; }}
     details {{ margin: 0.8rem 0; }}
     summary {{ cursor: pointer; color: var(--accent); font-size: 0.85rem; }}
-    pre {{ background: #0a0c14; padding: 1rem; border-radius: 6px; overflow-x: auto;
-           font-size: 0.8rem; margin-top: 0.5rem; color: #a8b2d8; }}
-    .remediation {{ background: rgba(100, 255, 218, 0.06); border-radius: 6px; padding: 0.8rem;
+    pre {{ background: #14101f; padding: 1rem; border-radius: 4px; overflow-x: auto;
+           font-size: 0.8rem; margin-top: 0.5rem; color: var(--text); font-family: 'JetBrains Mono', monospace; }}
+    .remediation {{ background: rgba(166, 132, 255, 0.08); border-left: 3px solid var(--accent); border-radius: 2px; padding: 0.8rem;
                     margin-top: 0.8rem; font-size: 0.88rem; }}
-    .meta {{ color: var(--muted); font-size: 0.78rem; margin-top: 0.5rem; }}
-    .section-title {{ color: var(--accent); font-size: 1.1rem; margin: 2rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }}
-    .legal-banner {{ background: #2d1b00; border: 1px solid #7a4500; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; font-size: 0.85rem; }}
+    .meta {{ color: var(--muted); font-size: 0.78rem; margin-top: 0.5rem; font-family: 'JetBrains Mono', monospace; }}
+    .section-title {{ color: var(--text); font-weight: 600; font-size: 1.05rem; margin: 2rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }}
+    .legal-banner {{ background: #241a3d; border: 1px solid var(--border); border-left: 3px solid #ff9f5a; border-radius: 4px; padding: 1rem; margin-bottom: 2rem; font-size: 0.85rem; }}
   </style>
 </head>
 <body>
-  <h1>🛡️ Rapport de Sécurité API</h1>
+  <h1>Rapport de Sécurité API</h1>
   <div class="meta-info">Cible : {html.escape(self.base_url)} &nbsp;·&nbsp; Généré le {now} &nbsp;·&nbsp; {self._req_count} requêtes effectuées</div>
 
   <div class="legal-banner">
-    ⚖️ <strong>Ce rapport est confidentiel.</strong> Il contient des vulnérabilités de sécurité détectées lors d'un test autorisé.
+    <strong>Ce rapport est confidentiel.</strong> Il contient des vulnérabilités de sécurité détectées lors d'un test autorisé.
     Ne pas partager sans accord du responsable de traitement. Conserver conformément à votre politique de gestion des incidents (RGPD Art. 32).
   </div>
 
@@ -672,10 +663,10 @@ class ApiFuzzer:
     </div>
     <div>
       <div class="stats">
-        <span class="stat-chip" style="background:#e74c3c22;color:#e74c3c">🔴 {counts.get('CRITIQUE',0)} Critique(s)</span>
-        <span class="stat-chip" style="background:#e67e2222;color:#e67e22">🟠 {counts.get('ÉLEVÉE',0)} Élevée(s)</span>
-        <span class="stat-chip" style="background:#f39c1222;color:#f39c12">🟡 {counts.get('MODÉRÉE',0)} Modérée(s)</span>
-        <span class="stat-chip" style="background:#27ae6022;color:#27ae60">🟢 {counts.get('FAIBLE',0)} Faible(s)</span>
+        <span class="stat-chip" style="background:#ff6b6b22;color:#ff6b6b">{counts.get('CRITIQUE',0)} Critique(s)</span>
+        <span class="stat-chip" style="background:#ff9f5a22;color:#ff9f5a">{counts.get('ÉLEVÉE',0)} Élevée(s)</span>
+        <span class="stat-chip" style="background:#e0c35222;color:#e0c352">{counts.get('MODÉRÉE',0)} Modérée(s)</span>
+        <span class="stat-chip" style="background:#7fe8a422;color:#7fe8a4">{counts.get('FAIBLE',0)} Faible(s)</span>
       </div>
       <div style="color:var(--muted);font-size:0.85rem;margin-top:0.5rem">
         {len(self.findings)} vulnérabilité(s) détectée(s) sur {len(PAYLOADS['sensitive_endpoints'])} endpoints testés
@@ -683,10 +674,10 @@ class ApiFuzzer:
     </div>
   </div>
 
-  <div class="section-title">📋 Vulnérabilités détectées</div>
-  {findings_html if findings_html else '<p style="color:#27ae60;font-size:1rem;padding:1rem">✅ Aucune vulnérabilité détectée lors de ce scan.</p>'}
+  <div class="section-title">Vulnérabilités détectées</div>
+  {findings_html if findings_html else '<p style="color:#7fe8a4;font-size:1rem;padding:1rem">Aucune vulnérabilité détectée lors de ce scan.</p>'}
 
-  <div class="section-title">📖 Référentiel OWASP API Security Top 10 (2023)</div>
+  <div class="section-title">Référentiel OWASP API Security Top 10 (2023)</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.8rem;margin-bottom:2rem">
     {''.join(f'<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.8rem;font-size:0.82rem"><strong style="color:var(--accent)">{item}</strong></div>' for item in [
       "API1 — Broken Object Level Auth",
@@ -725,7 +716,7 @@ def create_vulnerable_demo_api():
     Tourne sur localhost:7171 pendant la démo.
     """
     try:
-        from flask import Flask, request, jsonify
+        from flask import Flask, jsonify, request
         app = Flask(__name__)
 
         # Base de données en mémoire
@@ -803,7 +794,7 @@ def create_vulnerable_demo_api():
 def run_demo():
     SEP = "=" * 62
 
-    print(f"""
+    print("""
   Fuzzer d'API — OWASP API Security Top 10 (2023), test sur API locale
 
   Rappel légal : ce fuzzer est conçu pour tester VOS propres APIs.
@@ -837,14 +828,14 @@ def run_demo():
 
     # ── Phase 1 : Reconnaissance ────────────────────────────────
     print(f"  {'─'*60}")
-    print(f"  🔎  PHASE 1 : RECONNAISSANCE")
+    print("  🔎  PHASE 1 : RECONNAISSANCE")
     print(f"  {'─'*60}\n")
     fuzzer.test_security_headers("/api/v1/health")
     fuzzer.test_hidden_endpoints()
 
     # ── Phase 2 : Authentification ──────────────────────────────
     print(f"\n  {'─'*60}")
-    print(f"  🔐  PHASE 2 : AUTHENTIFICATION & AUTORISATION")
+    print("  🔐  PHASE 2 : AUTHENTIFICATION & AUTORISATION")
     print(f"  {'─'*60}\n")
     fuzzer.test_auth("/api/v1/admin/users")
     fuzzer.test_idor("/api/v1/users", current_id="1")
@@ -852,7 +843,7 @@ def run_demo():
 
     # ── Phase 3 : Injections ────────────────────────────────────
     print(f"\n  {'─'*60}")
-    print(f"  💉  PHASE 3 : INJECTIONS")
+    print("  💉  PHASE 3 : INJECTIONS")
     print(f"  {'─'*60}\n")
     fuzzer.test_injections("/api/v1/search", param="q")
     fuzzer.test_ssrf("/api/v1/fetch", param="url")
@@ -860,7 +851,7 @@ def run_demo():
 
     # ── Résultats ────────────────────────────────────────────────
     print(f"\n  {'─'*60}")
-    print(f"  📊  RÉSULTATS")
+    print("  📊  RÉSULTATS")
     print(f"  {'─'*60}\n")
 
     severity_icons = {"CRITIQUE": "🔴", "ÉLEVÉE": "🟠", "MODÉRÉE": "🟡", "FAIBLE": "🟢"}

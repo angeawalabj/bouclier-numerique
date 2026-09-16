@@ -22,22 +22,19 @@ nettement le bruit par rapport à une détection basée sur mots-clés.
 Référence : OWASP Top 10 A03:2021 (Injection), ISO 27001 A.14.2.8.
 """
 
-import urllib.request
+import html as html_module
+import random
+import re
+import string
+import threading
+import time
 import urllib.error
 import urllib.parse
-import html as html_module
-import time
-import re
-import random
-import string
-import json
-import threading
-from pathlib import Path
-from datetime import datetime
-from typing import Optional
+import urllib.request
 from collections import defaultdict
+from datetime import datetime
 from html.parser import HTMLParser
-
+from pathlib import Path
 
 # ════════════════════════════════════════════════════════════════
 # BIBLIOTHÈQUE DE PAYLOADS
@@ -568,7 +565,7 @@ class InjectionScanner:
 
     # ── Rapport HTML ─────────────────────────────────────────────
 
-    def generate_report(self, output_path: Optional[Path] = None) -> str:
+    def generate_report(self, output_path: Path | None = None) -> str:
         sev_order  = {"CRITIQUE": 0, "ÉLEVÉE": 1, "MODÉRÉE": 2, "FAIBLE": 3}
         sev_colors = {"CRITIQUE": "#e74c3c", "ÉLEVÉE": "#e67e22",
                       "MODÉRÉE": "#f39c12",  "FAIBLE": "#27ae60"}
@@ -624,37 +621,41 @@ class InjectionScanner:
 <html lang="fr">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>🛡️ Rapport Injections — {html_module.escape(self.base_url)}</title>
+  <title>Rapport Injections — {html_module.escape(self.base_url)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{{--bg:#0f1117;--card:#1a1d27;--border:#2d3148;--text:#e2e8f0;--muted:#8892b0;--accent:#64ffda}}
+    :root{{--bg:#050a05;--card:#0d150d;--border:#1e3320;--text:#c8f5cc;--muted:#5a8a60;--accent:#39ff88}}
     *{{box-sizing:border-box;margin:0;padding:0}}
-    body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;padding:2rem;max-width:1100px;margin:auto}}
-    h1{{color:var(--accent);font-size:1.8rem;margin-bottom:.3rem}}
+    body{{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;padding:2rem;max-width:1100px;margin:auto}}
+    h1{{color:var(--accent);font-size:1.5rem;margin-bottom:.3rem;font-weight:600}}
+    h1::before{{content:"$ ";color:var(--muted)}}
     .meta{{color:var(--muted);font-size:.82rem;margin-bottom:2rem}}
-    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:2rem;flex-wrap:wrap}}
-    .score-num{{font-size:3.5rem;font-weight:900;color:{score_color}}}
+    .score-row{{display:flex;align-items:center;gap:2rem;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1.5rem;margin-bottom:2rem;flex-wrap:wrap}}
+    .score-num{{font-size:3.5rem;font-weight:700;color:{score_color}}}
     .score-sub{{color:var(--muted);font-size:.85rem}}
     .chips{{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:.5rem}}
-    .chip{{padding:.3rem .8rem;border-radius:20px;font-weight:700;font-size:.82rem}}
-    .section{{color:var(--accent);font-size:1.1rem;margin:2rem 0 1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
-    .card{{background:var(--card);border-radius:8px;padding:1.2rem;margin-bottom:1rem;border:1px solid var(--border)}}
+    .chip{{padding:.3rem .8rem;border-radius:3px;font-weight:700;font-size:.82rem}}
+    .section{{color:var(--accent);font-size:1.05rem;margin:2rem 0 1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}}
+    .section::before{{content:"# "}}
+    .card{{background:var(--card);border-radius:4px;padding:1.2rem;margin-bottom:1rem;border:1px solid var(--border)}}
     .card-header{{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap}}
-    .badge{{color:#fff;padding:.2rem .6rem;border-radius:4px;font-size:.78rem;font-weight:700}}
-    .tag{{background:#1e3a5f;color:#7eb8f7;padding:.2rem .6rem;border-radius:4px;font-size:.78rem}}
-    .tag-type{{background:#1a3a1a;color:#7ef77e}}
+    .badge{{color:#04140a;padding:.2rem .6rem;border-radius:3px;font-size:.78rem;font-weight:700}}
+    .tag{{background:#132a1e;color:#6fe6a0;padding:.2rem .6rem;border-radius:3px;font-size:.78rem}}
+    .tag-type{{background:#1e3320;color:var(--accent)}}
     p{{color:var(--muted);font-size:.9rem;line-height:1.5;margin:.4rem 0}}
     .two-col{{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:.8rem 0}}
     .label{{font-size:.75rem;color:var(--muted);margin-bottom:.2rem}}
-    code{{background:#0a0c14;padding:.2rem .5rem;border-radius:4px;font-size:.82rem;color:#a8b2d8;display:inline-block;word-break:break-all}}
+    code{{background:#04140a;padding:.2rem .5rem;border-radius:3px;font-size:.82rem;color:var(--text);display:inline-block;word-break:break-all}}
     details{{margin:.6rem 0}}
     summary{{cursor:pointer;color:var(--accent);font-size:.83rem}}
-    pre{{background:#0a0c14;padding:.8rem;border-radius:6px;overflow-x:auto;font-size:.78rem;margin-top:.4rem;color:#a8b2d8;white-space:pre-wrap;word-break:break-word}}
-    .fix{{background:rgba(100,255,218,.06);border-radius:6px;padding:.7rem;margin-top:.7rem;font-size:.86rem}}
+    pre{{background:#04140a;padding:.8rem;border-radius:4px;overflow-x:auto;font-size:.78rem;margin-top:.4rem;color:var(--text);white-space:pre-wrap;word-break:break-word}}
+    .fix{{background:rgba(57,255,136,.07);border-left:3px solid var(--accent);border-radius:2px;padding:.7rem;margin-top:.7rem;font-size:.86rem}}
     .meta{{color:var(--muted);font-size:.76rem;margin-top:.5rem}}
   </style>
 </head>
 <body>
-  <h1>🛡️ Rapport d'Analyse — Injections Web</h1>
+  <h1>Rapport d'Analyse — Injections Web</h1>
   <div class="meta">Cible : {html_module.escape(self.base_url)} · {now} · {self._req_count} requêtes</div>
 
   <div class="score-row">
@@ -692,8 +693,9 @@ class InjectionScanner:
 def create_vulnerable_demo_app():
     """Application web volontairement vulnérable pour la démonstration."""
     try:
-        from flask import Flask, request, render_template_string, g
         import sqlite3 as sq3
+
+        from flask import Flask, g, render_template_string, request
 
         app = Flask(__name__)
         DB  = ":memory:"
@@ -835,7 +837,7 @@ Rappel légal : utilisation sur vos propres applications uniquement
         counts.get("CRITIQUE", 0) * 30 + counts.get("ÉLEVÉE", 0) * 15
     ))
 
-    print(f"\n  ─────────────────────────────────────────────────────────")
+    print("\n  ─────────────────────────────────────────────────────────")
     print(f"  BILAN : {len(scanner.findings)} vulnérabilité(s) · Score {score}/100")
     print(f"  Critique : {counts['CRITIQUE']}  Élevée : {counts['ÉLEVÉE']}  "
           f"Modérée : {counts['MODÉRÉE']}  Faible : {counts['FAIBLE']}")
